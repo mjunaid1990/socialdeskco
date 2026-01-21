@@ -530,7 +530,8 @@ class CompleteAppSeeder extends Seeder
                 $engagementTypes = ['like', 'comment', 'share', 'mention'];
                 $type = $engagementTypes[array_rand($engagementTypes)];
                 
-                Engagement::create([
+                // Build engagement data with only existing columns
+                $engagementData = [
                     'user_id' => $post->user_id,
                     'social_account_id' => $post->social_account_id,
                     'post_id' => $post->id,
@@ -541,20 +542,38 @@ class CompleteAppSeeder extends Seeder
                     'actor_full_name' => $this->generateFirstName() . ' ' . $this->generateLastName(),
                     'actor_platform_id' => 'user_' . Str::random(10),
                     'content' => $type === 'comment' ? $this->generateEngagementContent() : null,
-                    'engagement_score' => rand(1, 10),
-                    'platform_data' => [
+                    'platform_data' => json_encode([
                         'timestamp' => now()->subMinutes(rand(1, 1440))->toISOString(),
                         'device' => ['mobile', 'desktop', 'tablet'][array_rand(['mobile', 'desktop', 'tablet'])],
-                    ],
+                    ]),
                     'is_automated_response' => rand(0, 10) > 8,
                     'engaged_at' => now()->subMinutes(rand(1, 1440)),
-                    'is_spam' => false,
-                    'spam_reason' => null,
-                    'is_duplicate' => false,
-                    'duplicate_of' => null,
-                    'content_hash' => md5(Str::random(20)),
-                    'processed_at' => rand(0, 10) > 3 ? now() : null,
-                ]);
+                ];
+                
+                // Only add columns if they exist in database
+                if (\Schema::hasColumn('engagements', 'engagement_score')) {
+                    $engagementData['engagement_score'] = rand(1, 10);
+                }
+                
+                if (\Schema::hasColumn('engagements', 'processed_at')) {
+                    $engagementData['processed_at'] = rand(0, 10) > 3 ? now() : null;
+                }
+                
+                if (\Schema::hasColumn('engagements', 'is_spam')) {
+                    $engagementData['is_spam'] = false;
+                    $engagementData['spam_reason'] = null;
+                }
+                
+                if (\Schema::hasColumn('engagements', 'is_duplicate')) {
+                    $engagementData['is_duplicate'] = false;
+                    $engagementData['duplicate_of'] = null;
+                }
+                
+                if (\Schema::hasColumn('engagements', 'content_hash')) {
+                    $engagementData['content_hash'] = md5(Str::random(20));
+                }
+                
+                Engagement::create($engagementData);
             }
         }
     }
