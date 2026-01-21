@@ -11,6 +11,7 @@ use App\Models\Lead;
 use App\Models\Engagement;
 use App\Models\AutomationRule;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 
 class CompleteAppSeeder extends Seeder
@@ -409,7 +410,8 @@ class CompleteAppSeeder extends Seeder
                 $lastName = $this->generateLastName();
                 $email = strtolower($firstName) . '.' . strtolower($lastName) . '@example.com';
                 
-                Lead::create([
+                // Check if columns exist before using them
+                $leadData = [
                     'user_id' => $post->user_id,
                     'social_account_id' => $post->social_account_id,
                     'post_id' => $post->id,
@@ -421,27 +423,45 @@ class CompleteAppSeeder extends Seeder
                     'platform_lead_id' => 'lead_' . Str::random(10),
                     'source_type' => 'post_comment',
                     'message' => $this->generateLeadMessage($post->socialAccount->platform),
-                    'platform_data' => [
+                    'platform_data' => json_encode([
                         'comment_id' => 'comment_' . Str::random(10),
                         'thread_id' => 'thread_' . Str::random(10),
                         'user_profile' => [
                             'avatar' => 'https://picsum.photos/seed/lead' . rand(1, 1000) . '/100/100.jpg',
                             'followers' => rand(10, 5000),
                         ],
-                    ],
+                    ]),
                     'status' => rand(0, 10) > 7 ? 'contacted' : 'new',
                     'contacted_at' => rand(0, 10) > 7 ? now()->subHours(rand(1, 48)) : null,
                     'converted_at' => null,
-                    'custom_fields' => [
+                ];
+                
+                // Only add fields if they exist in database
+                if (\Schema::hasColumn('leads', 'custom_fields')) {
+                    $leadData['custom_fields'] = json_encode([
                         'source' => 'social_media',
                         'interest_level' => rand(1, 5),
                         'budget_range' => '$' . (rand(1, 10) * 1000) . ' - $' . (rand(11, 50) * 1000),
-                    ],
-                    'score' => rand(20, 95),
-                    'qualification' => ['cold', 'warm', 'hot'][array_rand(['cold', 'warm', 'hot'])],
-                    'followup_count' => rand(0, 3),
-                    'automation_history' => [],
-                ]);
+                    ]);
+                }
+                
+                if (\Schema::hasColumn('leads', 'score')) {
+                    $leadData['score'] = rand(20, 95);
+                }
+                
+                if (\Schema::hasColumn('leads', 'qualification')) {
+                    $leadData['qualification'] = ['cold', 'warm', 'hot'][array_rand(['cold', 'warm', 'hot'])];
+                }
+                
+                if (\Schema::hasColumn('leads', 'followup_count')) {
+                    $leadData['followup_count'] = rand(0, 3);
+                }
+                
+                if (\Schema::hasColumn('leads', 'automation_history')) {
+                    $leadData['automation_history'] = json_encode([]);
+                }
+                
+                Lead::create($leadData);
             }
         }
     }
@@ -581,7 +601,7 @@ class CompleteAppSeeder extends Seeder
                     $triggerType = $triggerTypes[array_rand($triggerTypes)];
                     $actionType = $actionTypes[array_rand($actionTypes)];
                     
-                    AutomationRule::create([
+                    $ruleData = [
                         'user_id' => $user->id,
                         'social_account_id' => $socialAccount->id,
                         'name' => $this->generateAutomationRuleName($triggerType, $actionType),
@@ -592,8 +612,14 @@ class CompleteAppSeeder extends Seeder
                         'is_active' => rand(0, 10) > 2,
                         'execution_count' => rand(0, 100),
                         'last_executed_at' => rand(0, 10) > 5 ? now()->subHours(rand(1, 24)) : null,
-                        'platform_filter' => $socialAccount->platform,
-                    ]);
+                    ];
+                    
+                    // Only add platform_filter if column exists
+                    if (\Schema::hasColumn('automation_rules', 'platform_filter')) {
+                        $ruleData['platform_filter'] = $socialAccount->platform;
+                    }
+                    
+                    AutomationRule::create($ruleData);
                 }
             }
         }
