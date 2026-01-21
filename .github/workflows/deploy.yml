@@ -15,22 +15,21 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Setup SSH
-  run: |
-    mkdir -p ~/.ssh
-    cat > ~/.ssh/id_rsa << 'EOF'
-${{ secrets.SSH_KEY }}
-EOF
-    chmod 600 ~/.ssh/id_rsa
-    ssh-keyscan -H ${{ secrets.SSH_HOST }} >> ~/.ssh/known_hosts
+        run: |
+          mkdir -p ~/.ssh
+          cat > ~/.ssh/id_rsa << 'EOF'
+          ${{ secrets.SSH_KEY }}
+          EOF
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.SSH_HOST }} >> ~/.ssh/known_hosts
 
       - name: Test SSH Connection
         run: |
-          ssh -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} "echo 'SSH connection OK'"
+          ssh -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} "echo SSH connection OK"
 
       - name: Deploy to Server
         run: |
           ssh -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} << 'EOF'
-            set -e
             cd ${{ secrets.APP_PATH }}
             git fetch --all
             git reset --hard origin/main
