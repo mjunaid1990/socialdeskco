@@ -3,7 +3,7 @@
 @section('title', 'Lead Automation')
 
 @section('content')
-<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+<div class="w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
     <div class="mb-6">
         <h1 class="text-2xl font-bold text-gray-900">Lead Automation</h1>
         <p class="mt-1 text-sm text-gray-600">Manage and automate your lead follow-up process</p>

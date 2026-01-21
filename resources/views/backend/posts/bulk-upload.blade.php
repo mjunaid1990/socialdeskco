@@ -3,7 +3,7 @@
 @section('title', 'Bulk Upload Posts')
 
 @section('content')
-<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+<div class="w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
     <div class="mb-6">
         <h1 class="text-2xl font-bold text-gray-900">Bulk Upload Posts</h1>
         <p class="mt-1 text-sm text-gray-600">Create multiple posts at once and schedule them across your social media accounts</p>
