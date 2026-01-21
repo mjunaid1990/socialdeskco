@@ -1,0 +1,42 @@
+@extends('layouts.app')
+
+@section('content')
+<div class="container mx-auto mt-8">
+    <div class="max-w-md mx-auto bg-white p-8 rounded-lg shadow-md">
+        <h2 class="text-2xl font-bold text-center mb-6">Forgot Password</h2>
+
+        @if (session('status'))
+            <div class="mb-4 text-green-600">
+                {{ session('status') }}
+            </div>
+        @endif
+
+        <form method="POST" action="{{ route('password.email') }}">
+            @csrf
+
+            <div class="mb-4">
+                <label for="email" class="block text-gray-700 text-sm font-medium mb-2">Email Address</label>
+                <input id="email" type="email" class="w-full px-3 py-2 border border-gray-300 rounded-md @error('email') border-red-500 @enderror" name="email" value="{{ old('email') }}" required autocomplete="email" autofocus>
+                
+                @error('email')
+                    <span class="text-red-500 text-sm mt-1" role="alert">
+                        <strong>{{ $message }}</strong>
+                    </span>
+                @enderror
+            </div>
+
+            <div class="mb-4">
+                <button type="submit" class="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 transition duration-300">
+                    Send Password Reset Link
+                </button>
+            </div>
+
+            <div class="text-center">
+                <a class="text-blue-600 text-sm hover:text-blue-800" href="{{ route('login') }}">
+                    Back to Login
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+@endsection

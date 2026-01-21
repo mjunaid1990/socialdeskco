@@ -1,0 +1,489 @@
+<?php
+
+namespace App\Helpers;
+
+use App\Models\Setting;
+use App\Models\BusinessSetting;
+use App\Models\Business;
+use Illuminate\Support\Facades\Auth;
+
+class SettingsHelper
+{
+    // Define all available settings with their configuration
+    public const GENERAL_SETTINGS = [
+        'app_name' => [
+            'type' => 'text',
+            'label' => 'App Name',
+            'placeholder' => 'Enter application name',
+            'description' => 'The name of your application',
+            'group' => 'general',
+        ],
+        'app_description' => [
+            'type' => 'textarea',
+            'label' => 'App Description',
+            'placeholder' => 'Enter application description',
+            'description' => 'Short description of your application',
+            'group' => 'general',
+        ],
+        'timezone' => [
+            'type' => 'select',
+            'label' => 'Timezone',
+            'options' => [
+                'UTC' => 'UTC',
+                'America/New_York' => 'Eastern Time',
+                'America/Chicago' => 'Central Time',
+                'America/Denver' => 'Mountain Time',
+                'America/Los_Angeles' => 'Pacific Time',
+                'Europe/London' => 'GMT/BST',
+                'Europe/Paris' => 'Central European Time',
+                'Asia/Tokyo' => 'Japan Standard Time',
+                'Asia/Shanghai' => 'China Standard Time',
+            ],
+            'description' => 'Default timezone for the application',
+            'group' => 'general',
+        ],
+        'default_language' => [
+            'type' => 'select',
+            'label' => 'Default Language',
+            'options' => [
+                'en' => 'English',
+                'es' => 'Spanish',
+                'fr' => 'French',
+                'de' => 'German',
+                'it' => 'Italian',
+                'pt' => 'Portuguese',
+            ],
+            'description' => 'Default language for the application',
+            'group' => 'general',
+        ],
+        'notification_email' => [
+            'type' => 'email',
+            'label' => 'Notification Email',
+            'placeholder' => 'notifications@example.com',
+            'description' => 'Email address for system notifications',
+            'group' => 'notifications',
+        ],
+        'auto_backup_enabled' => [
+            'type' => 'checkbox',
+            'label' => 'Enable Auto Backup',
+            'description' => 'Automatically backup data daily',
+            'group' => 'system',
+        ],
+        'backup_retention_days' => [
+            'type' => 'number',
+            'label' => 'Backup Retention Days',
+            'placeholder' => '30',
+            'description' => 'Number of days to keep backups',
+            'group' => 'system',
+        ],
+    ];
+
+    public const BUSINESS_SOCIAL_MEDIA_SETTINGS = [
+        // Facebook settings
+        'facebook_client_id' => [
+            'type' => 'text',
+            'label' => 'Facebook Client ID',
+            'placeholder' => 'Enter Facebook App ID',
+            'description' => 'Client ID from Facebook Developer Portal',
+            'group' => 'facebook',
+        ],
+        'facebook_client_secret' => [
+            'type' => 'password',
+            'label' => 'Facebook Client Secret',
+            'placeholder' => 'Enter Facebook App Secret',
+            'description' => 'Client Secret from Facebook Developer Portal',
+            'group' => 'facebook',
+        ],
+        'facebook_api_version' => [
+            'type' => 'text',
+            'label' => 'Facebook API Version',
+            'placeholder' => 'v18.0',
+            'description' => 'API version to use for Facebook',
+            'group' => 'facebook',
+        ],
+        
+        // Instagram settings
+        'instagram_client_id' => [
+            'type' => 'text',
+            'label' => 'Instagram Client ID',
+            'placeholder' => 'Enter Instagram App ID',
+            'description' => 'Client ID from Instagram Developer Portal',
+            'group' => 'instagram',
+        ],
+        'instagram_client_secret' => [
+            'type' => 'password',
+            'label' => 'Instagram Client Secret',
+            'placeholder' => 'Enter Instagram App Secret',
+            'description' => 'Client Secret from Instagram Developer Portal',
+            'group' => 'instagram',
+        ],
+        'instagram_api_version' => [
+            'type' => 'text',
+            'label' => 'Instagram API Version',
+            'placeholder' => 'v18.0',
+            'description' => 'API version to use for Instagram',
+            'group' => 'instagram',
+        ],
+        
+        // LinkedIn settings
+        'linkedin_client_id' => [
+            'type' => 'text',
+            'label' => 'LinkedIn Client ID',
+            'placeholder' => 'Enter LinkedIn App ID',
+            'description' => 'Client ID from LinkedIn Developer Portal',
+            'group' => 'linkedin',
+        ],
+        'linkedin_client_secret' => [
+            'type' => 'password',
+            'label' => 'LinkedIn Client Secret',
+            'placeholder' => 'Enter LinkedIn App Secret',
+            'description' => 'Client Secret from LinkedIn Developer Portal',
+            'group' => 'linkedin',
+        ],
+        'linkedin_api_version' => [
+            'type' => 'text',
+            'label' => 'LinkedIn API Version',
+            'placeholder' => 'v2',
+            'description' => 'API version to use for LinkedIn',
+            'group' => 'linkedin',
+        ],
+        
+        // X (Twitter) settings
+        'x_client_id' => [
+            'type' => 'text',
+            'label' => 'X Client ID',
+            'placeholder' => 'Enter X App ID',
+            'description' => 'Client ID from X Developer Portal',
+            'group' => 'x',
+        ],
+        'x_client_secret' => [
+            'type' => 'password',
+            'label' => 'X Client Secret',
+            'placeholder' => 'Enter X App Secret',
+            'description' => 'Client Secret from X Developer Portal',
+            'group' => 'x',
+        ],
+        'x_api_version' => [
+            'type' => 'text',
+            'label' => 'X API Version',
+            'placeholder' => '2',
+            'description' => 'API version to use for X',
+            'group' => 'x',
+        ],
+        
+        // WhatsApp settings
+        'whatsapp_business_account_id' => [
+            'type' => 'text',
+            'label' => 'WhatsApp Business Account ID',
+            'placeholder' => 'Enter WhatsApp Business Account ID',
+            'description' => 'WhatsApp Business Account ID from Meta Business Manager',
+            'group' => 'whatsapp',
+        ],
+        'whatsapp_access_token' => [
+            'type' => 'password',
+            'label' => 'WhatsApp Access Token',
+            'placeholder' => 'Enter WhatsApp Access Token',
+            'description' => 'Access token for WhatsApp Business API',
+            'group' => 'whatsapp',
+        ],
+        'whatsapp_phone_number_id' => [
+            'type' => 'text',
+            'label' => 'Phone Number ID',
+            'placeholder' => 'Enter Phone Number ID',
+            'description' => 'Phone Number ID from Meta Business Manager',
+            'group' => 'whatsapp',
+        ],
+        'whatsapp_api_version' => [
+            'type' => 'text',
+            'label' => 'WhatsApp API Version',
+            'placeholder' => 'v18.0',
+            'description' => 'API version to use for WhatsApp',
+            'group' => 'whatsapp',
+        ],
+        
+        // TikTok settings
+        'tiktok_client_id' => [
+            'type' => 'text',
+            'label' => 'TikTok Client ID',
+            'placeholder' => 'Enter TikTok App ID',
+            'description' => 'Client ID from TikTok Developer Portal',
+            'group' => 'tiktok',
+        ],
+        'tiktok_client_secret' => [
+            'type' => 'password',
+            'label' => 'TikTok Client Secret',
+            'placeholder' => 'Enter TikTok App Secret',
+            'description' => 'Client Secret from TikTok Developer Portal',
+            'group' => 'tiktok',
+        ],
+        
+        // YouTube settings
+        'youtube_client_id' => [
+            'type' => 'text',
+            'label' => 'YouTube Client ID',
+            'placeholder' => 'Enter YouTube App ID',
+            'description' => 'Client ID from Google Developer Console',
+            'group' => 'youtube',
+        ],
+        'youtube_client_secret' => [
+            'type' => 'password',
+            'label' => 'YouTube Client Secret',
+            'placeholder' => 'Enter YouTube App Secret',
+            'description' => 'Client Secret from Google Developer Console',
+            'group' => 'youtube',
+        ],
+    ];
+
+    public const SOCIAL_MEDIA_SETTINGS = [];
+
+    /**
+     * Get all available settings grouped by type
+     */
+    public static function getAllSettings(): array
+    {
+        return array_merge(self::GENERAL_SETTINGS, self::SOCIAL_MEDIA_SETTINGS);
+    }
+
+    /**
+     * Get all business social media settings
+     */
+    public static function getBusinessSocialMediaSettings(): array
+    {
+        return self::BUSINESS_SOCIAL_MEDIA_SETTINGS;
+    }
+
+    /**
+     * Get settings by group
+     */
+    public static function getSettingsByGroup(string $group): array
+    {
+        $allSettings = self::getAllSettings();
+        $groupedSettings = [];
+        
+        foreach ($allSettings as $key => $config) {
+            if (isset($config['group']) && $config['group'] === $group) {
+                $groupedSettings[$key] = $config;
+            }
+        }
+        
+        return $groupedSettings;
+    }
+
+    /**
+     * Get all groups
+     */
+    public static function getGroups(): array
+    {
+        $allSettings = self::getAllSettings();
+        $groups = [];
+        
+        foreach ($allSettings as $config) {
+            if (isset($config['group']) && !in_array($config['group'], $groups)) {
+                $groups[] = $config['group'];
+            }
+        }
+        
+        return $groups;
+    }
+
+    /**
+     * Get a setting value for the authenticated user
+     *
+     * @param string $key
+     * @param mixed $default
+     * @return mixed
+     */
+    public static function get($key, $default = null)
+    {
+        if (!Auth::check()) {
+            return $default;
+        }
+
+        $setting = Setting::where('user_id', Auth::id())
+            ->where('setting_key', $key)
+            ->first();
+
+        return $setting ? $setting->setting_value : $default;
+    }
+
+    /**
+     * Get a business setting value
+     *
+     * @param int $businessId
+     * @param string $key
+     * @param mixed $default
+     * @return mixed
+     */
+    public static function getBusinessSetting($businessId, $key, $default = null)
+    {
+        $setting = BusinessSetting::where('business_id', $businessId)
+            ->where('setting_key', $key)
+            ->first();
+
+        return $setting ? $setting->setting_value : $default;
+    }
+
+    /**
+     * Set a setting value for the authenticated user
+     *
+     * @param string $key
+     * @param mixed $value
+     * @return bool
+     */
+    public static function set($key, $value, $type = 'general')
+    {
+        if (!Auth::check()) {
+            return false;
+        }
+
+        $setting = Setting::updateOrCreate(
+            [
+                'user_id' => Auth::id(),
+                'setting_key' => $key,
+            ],
+            [
+                'setting_value' => $value,
+                'setting_type' => $type,
+            ]
+        );
+
+        return $setting !== null;
+    }
+
+    /**
+     * Set a business setting value
+     *
+     * @param int $businessId
+     * @param string $key
+     * @param mixed $value
+     * @return bool
+     */
+    public static function setBusinessSetting($businessId, $key, $value, $type = 'general')
+    {
+        $setting = BusinessSetting::updateOrCreate(
+            [
+                'business_id' => $businessId,
+                'setting_key' => $key,
+            ],
+            [
+                'setting_value' => $value,
+                'setting_type' => $type,
+            ]
+        );
+
+        return $setting !== null;
+    }
+
+    /**
+     * Get all social media settings for the authenticated user
+     *
+     * @return array
+     */
+    public static function getSocialMediaSettings()
+    {
+        if (!Auth::check()) {
+            return [];
+        }
+
+        $settings = Setting::where('user_id', Auth::id())
+            ->whereIn('setting_key', array_keys(self::SOCIAL_MEDIA_SETTINGS))
+            ->get()
+            ->pluck('setting_value', 'setting_key')
+            ->toArray();
+
+        return $settings;
+    }
+
+    /**
+     * Get all business social media settings
+     *
+     * @param int $businessId
+     * @return array
+     */
+    public static function getBusinessSocialMediaSettingsForBusiness($businessId)
+    {
+        $settings = BusinessSetting::where('business_id', $businessId)
+            ->whereIn('setting_key', array_keys(self::BUSINESS_SOCIAL_MEDIA_SETTINGS))
+            ->get()
+            ->pluck('setting_value', 'setting_key')
+            ->toArray();
+
+        return $settings;
+    }
+
+    /**
+     * Check if all required social media settings are configured
+     *
+     * @param array $requiredKeys
+     * @return bool
+     */
+    public static function hasRequiredSettings($requiredKeys = [])
+    {
+        if (empty($requiredKeys)) {
+            $requiredKeys = ['facebook_client_id', 'facebook_client_secret'];
+        }
+
+        $settings = self::getSocialMediaSettings();
+
+        foreach ($requiredKeys as $key) {
+            if (empty($settings[$key])) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * Check if all required business social media settings are configured
+     *
+     * @param int $businessId
+     * @param array $requiredKeys
+     * @return bool
+     */
+    public static function hasBusinessRequiredSettings($businessId, $requiredKeys = [])
+    {
+        if (empty($requiredKeys)) {
+            $requiredKeys = ['facebook_client_id', 'facebook_client_secret'];
+        }
+
+        $settings = self::getBusinessSocialMediaSettingsForBusiness($businessId);
+
+        foreach ($requiredKeys as $key) {
+            if (empty($settings[$key])) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * Get a specific social media setting
+     *
+     * @param string $platform
+     * @param string $key
+     * @param mixed $default
+     * @return mixed
+     */
+    public static function getSocialMediaSetting($platform, $key, $default = null)
+    {
+        $settingKey = $platform . '_' . $key;
+        return self::get($settingKey, $default);
+    }
+
+    /**
+     * Get a specific business social media setting
+     *
+     * @param int $businessId
+     * @param string $platform
+     * @param string $key
+     * @param mixed $default
+     * @return mixed
+     */
+    public static function getBusinessSocialMediaSetting($businessId, $platform, $key, $default = null)
+    {
+        $settingKey = $platform . '_' . $key;
+        return self::getBusinessSetting($businessId, $settingKey, $default);
+    }
+}
