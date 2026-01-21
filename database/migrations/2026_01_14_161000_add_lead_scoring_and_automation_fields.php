@@ -35,10 +35,10 @@ return new class extends Migration
             
             // Add new trigger types for leads (only if they don't exist)
             if (!Schema::hasColumn('automation_rules', 'platform_filter')) {
-                $table->after('trigger_type', function (Blueprint $table) {
-                    $table->string('platform_filter')->nullable();
-                    $table->json('trigger_conditions')->nullable();
-                });
+                $table->string('platform_filter')->nullable()->after('trigger_type');
+            }
+            if (!Schema::hasColumn('automation_rules', 'trigger_conditions')) {
+                $table->json('trigger_conditions')->nullable()->after('platform_filter');
             }
         });
     }
@@ -49,21 +49,42 @@ return new class extends Migration
     public function down(): void
     {
         Schema::table('leads', function (Blueprint $table) {
-            $table->dropColumn([
-                'score',
-                'qualification',
-                'last_followup_at',
-                'followup_count',
-                'automation_history'
-            ]);
+            $columnsToDrop = [];
+            if (Schema::hasColumn('leads', 'score')) {
+                $columnsToDrop[] = 'score';
+            }
+            if (Schema::hasColumn('leads', 'qualification')) {
+                $columnsToDrop[] = 'qualification';
+            }
+            if (Schema::hasColumn('leads', 'last_followup_at')) {
+                $columnsToDrop[] = 'last_followup_at';
+            }
+            if (Schema::hasColumn('leads', 'followup_count')) {
+                $columnsToDrop[] = 'followup_count';
+            }
+            if (Schema::hasColumn('leads', 'automation_history')) {
+                $columnsToDrop[] = 'automation_history';
+            }
+            
+            if (!empty($columnsToDrop)) {
+                $table->dropColumn($columnsToDrop);
+            }
         });
 
         Schema::table('automation_rules', function (Blueprint $table) {
             $table->string('trigger_type')->change();
-            $table->dropColumn([
-                'platform_filter',
-                'trigger_conditions'
-            ]);
+            
+            $columnsToDrop = [];
+            if (Schema::hasColumn('automation_rules', 'platform_filter')) {
+                $columnsToDrop[] = 'platform_filter';
+            }
+            if (Schema::hasColumn('automation_rules', 'trigger_conditions')) {
+                $columnsToDrop[] = 'trigger_conditions';
+            }
+            
+            if (!empty($columnsToDrop)) {
+                $table->dropColumn($columnsToDrop);
+            }
         });
     }
 };
