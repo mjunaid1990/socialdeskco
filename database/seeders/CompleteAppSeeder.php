@@ -210,6 +210,7 @@ class CompleteAppSeeder extends Seeder
             }
         }
     }
+    
 
     /**
      * Create a social account for a user.
