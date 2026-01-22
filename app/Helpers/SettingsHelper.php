@@ -472,6 +472,26 @@ class SettingsHelper
     }
 
     /**
+     * Get a setting value for the authenticated user
+     *
+     * @param string $key
+     * @param mixed $default
+     * @return mixed
+     */
+    public static function getAdmin($key, $default = null)
+    {
+        if (!Auth::check()) {
+            return $default;
+        }
+
+        $setting = Setting::where('user_id', 1)
+            ->where('setting_key', $key)
+            ->first();
+
+        return $setting ? $setting->setting_value : $default;
+    }
+
+    /**
      * Set a setting value for the authenticated user
      *
      * @param string $key
@@ -552,7 +572,7 @@ class SettingsHelper
     public static function getSocialMediaSetting($platform, $key, $default = null)
     {
         $settingKey = $platform . '_' . $key;
-        return self::get($settingKey, $default);
+        return self::getAdmin($settingKey, $default);
     }
 
     /**
