@@ -45,7 +45,8 @@
                         <h3 class="text-lg font-semibold text-gray-900 mb-2">{{ $label }}</h3>
                         <p class="text-sm text-gray-600 mb-4">Connect your {{ $label }} account to enable automation</p>
                         
-                        <a href="{{ route('admin.social-accounts.oauth', $key) }}" 
+                        <a href="#" 
+                           onclick="openOAuthPopup('{{ route('oauth.redirect', $key) }}', '{{ $label }}')"
                            class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 w-full justify-center">
                             <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/>
@@ -64,4 +65,29 @@
         </div>
     </div>
 </div>
+
+<script>
+function openOAuthPopup(url, platform) {
+    const width = 600;
+    const height = 700;
+    const left = (screen.width / 2) - (width / 2);
+    const top = (screen.height / 2) - (height / 2);
+    
+    const popup = window.open(
+        url,
+        'oauth_' + platform,
+        `width=${width},height=${height},left=${left},top=${top},scrollbars=yes,resizable=yes`
+    );
+    
+    // Poll for popup closure
+    const checkClosed = setInterval(() => {
+        if (popup.closed) {
+            clearInterval(checkClosed);
+            // Reload the page to show updated social accounts
+            window.location.href = '{{ route("admin.social-accounts.index") }}';
+        }
+    }, 1000);
+}
+</script>
+
 @endsection

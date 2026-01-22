@@ -8,6 +8,7 @@ use App\Http\Controllers\Backend\LeadController;
 use App\Http\Controllers\Backend\EngagementController;
 use App\Http\Controllers\Backend\AutomationRuleController;
 use App\Http\Controllers\HomeController;
+use App\Http\Controllers\OAuthController;
 use App\Http\Controllers\Backend\SettingsController;
 use App\Http\Controllers\Backend\BusinessController;
 use App\Http\Controllers\Backend\LeadAutomationController;
@@ -58,12 +59,14 @@ Route::middleware('auth')->group(function () {
                 ->name('logout');
 });
 
+// OAuth routes (outside admin middleware)
+Route::get('/oauth/callback/{platform}', [OAuthController::class, 'callback'])->name('oauth.callback');
+Route::get('/oauth/redirect/{platform}', [OAuthController::class, 'redirect'])->name('oauth.redirect');
+
 // Backend routes
 Route::prefix('admin')->name('admin.')->middleware(['auth'])->group(function () {
     Route::get('/', [DashboardController::class, 'index'])->name('dashboard');
     Route::resource('social-accounts', SocialAccountController::class);
-    Route::get('/social-accounts/oauth/{platform}', [SocialAccountController::class, 'oauthRedirect'])->name('social-accounts.oauth');
-    Route::get('/social-accounts/callback/{platform}', [SocialAccountController::class, 'oauthCallback'])->name('social-accounts.callback');
     Route::get('/posts/bulk-upload', [\App\Http\Controllers\Backend\PostController::class, 'bulkUpload'])->name('posts.bulk-upload');
     Route::post('/posts/process-bulk-upload', [\App\Http\Controllers\Backend\PostController::class, 'processBulkUpload'])->name('posts.process-bulk-upload');
     Route::resource('posts', PostController::class);
