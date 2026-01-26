@@ -74,6 +74,16 @@ class OAuthController extends Controller
 
             case 'instagram':
                 $scope = 'instagram_business_basic,instagram_business_manage_messages,instagram_business_manage_comments,instagram_business_content_publish,instagram_business_manage_insights';
+                
+                // Debug the redirect URI generation
+                Log::info('=== Redirect URI Debug ===');
+                Log::info('Route name: oauth.callback');
+                Log::info('Platform: ' . $platform);
+                Log::info('Generated redirect URI: ' . $redirectUri);
+                Log::info('Expected redirect URI: https://www.socialdesk.co/oauth/callback/instagram');
+                Log::info('Do they match? ' . ($redirectUri === 'https://www.socialdesk.co/oauth/callback/instagram' ? 'YES' : 'NO'));
+                Log::info('=== Redirect URI Debug End ===');
+                
                 $oauthUrl = 'https://api.instagram.com/oauth/authorize?' . http_build_query([
                     'client_id' => $clientId,
                     'redirect_uri' => $redirectUri,

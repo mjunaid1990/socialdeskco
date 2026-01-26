@@ -572,7 +572,14 @@ class SettingsHelper
     public static function getSocialMediaSetting($platform, $key, $default = null)
     {
         $settingKey = $platform . '_' . $key;
-        return self::getAdmin($settingKey, $default);
+        $value = self::getAdmin($settingKey, $default);
+        
+        // Strip quotes from the value if they exist
+        if (is_string($value)) {
+            $value = trim($value, '"\'');
+        }
+        
+        return $value;
     }
 
     /**
