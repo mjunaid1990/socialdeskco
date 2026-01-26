@@ -73,7 +73,13 @@ class OAuthController extends Controller
                 ]);
 
             case 'instagram':
-                $scope = 'instagram_business_basic,instagram_business_manage_messages,instagram_business_manage_comments,instagram_business_content_publish,instagram_business_manage_insights';
+                $scope = implode(',', [
+                    'instagram_business_basic',
+                    'instagram_business_manage_messages',
+                    'instagram_business_manage_comments',
+                    'instagram_business_content_publish',
+                    'instagram_business_manage_insights'
+                ]);
                 $oauthUrl = "https://api.instagram.com/oauth/authorize?" . http_build_query([
                     'client_id' => $clientId,
                     'redirect_uri' => $redirectUri,
