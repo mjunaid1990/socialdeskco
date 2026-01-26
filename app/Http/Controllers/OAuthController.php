@@ -73,7 +73,7 @@ class OAuthController extends Controller
                 ]);
 
             case 'instagram':
-                $scope = 'instagram_basic,instagram_graph_user_profile,instagram_content_publish';
+                $scope = 'instagram_business_basic,instagram_business_content_publish';
                 $oauthUrl = 'https://api.instagram.com/oauth/authorize?' . http_build_query([
                     'client_id' => $clientId,
                     'redirect_uri' => $redirectUri,
@@ -344,7 +344,7 @@ class OAuthController extends Controller
                 // Use Instagram Graph API directly for Business Login
                 $response = $client->get("https://graph.instagram.com/me", [
                     'query' => [
-                        'fields' => 'id,username,account_type,media_count,followers_count,profile_picture_url',
+                        'fields' => 'id,username,name,profile_picture_url,followers_count,media_count,account_type',
                         'access_token' => $accessToken,
                     ]
                 ]);
