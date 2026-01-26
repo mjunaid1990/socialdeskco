@@ -74,16 +74,6 @@ class OAuthController extends Controller
 
             case 'instagram':
                 $scope = 'instagram_business_basic,instagram_business_manage_messages,instagram_business_manage_comments,instagram_business_content_publish,instagram_business_manage_insights';
-                
-                // Debug the redirect URI generation
-                Log::info('=== Redirect URI Debug ===');
-                Log::info('Route name: oauth.callback');
-                Log::info('Platform: ' . $platform);
-                Log::info('Generated redirect URI: ' . $redirectUri);
-                Log::info('Expected redirect URI: https://www.socialdesk.co/oauth/callback/instagram');
-                Log::info('Do they match? ' . ($redirectUri === 'https://www.socialdesk.co/oauth/callback/instagram' ? 'YES' : 'NO'));
-                Log::info('=== Redirect URI Debug End ===');
-                
                 $oauthUrl = 'https://api.instagram.com/oauth/authorize?' . http_build_query([
                     'client_id' => $clientId,
                     'redirect_uri' => $redirectUri,
@@ -91,15 +81,6 @@ class OAuthController extends Controller
                     'response_type' => 'code',
                     'state' => $state,
                 ]);
-                
-                // Debug Instagram OAuth URL
-                Log::info('=== Instagram OAuth URL Debug ===');
-                Log::info('Client ID: ' . $clientId);
-                Log::info('Redirect URI: ' . $redirectUri);
-                Log::info('Scope: ' . $scope);
-                Log::info('State: ' . $state);
-                Log::info('Full OAuth URL: ' . $oauthUrl);
-                Log::info('=== Instagram OAuth URL Debug End ===');
                 
                 return $oauthUrl;
 
@@ -148,13 +129,6 @@ class OAuthController extends Controller
     {
         $platform = strtolower($platform);
         
-        // Debug callback request
-        Log::info("=== OAuth Callback Debug for {$platform} ===");
-        Log::info('Request Data: ', $request->all());
-        Log::info('Has Code: ' . ($request->has('code') ? 'YES' : 'NO'));
-        Log::info('Has Error: ' . ($request->has('error') ? 'YES' : 'NO'));
-        Log::info('Has State: ' . ($request->has('state') ? 'YES' : 'NO'));
-        
         try {
             // Validate state parameter for security
             $storedState = session('oauth_state_' . $platform);
@@ -170,6 +144,7 @@ class OAuthController extends Controller
             // Check for OAuth errors
             if ($request->has('error')) {
                 $errorMessage = $request->error_description ?? $request->error;
+                Log::error("OAuth error for {$platform}: {$errorMessage}");
                 // Return error callback view
                 return view('oauth-callback')->with('error', "OAuth error: {$errorMessage}");
             }
@@ -254,33 +229,17 @@ class OAuthController extends Controller
                     'code' => $code,
                 ];
                 
-                // Comprehensive debugging
-                Log::info('=== Instagram OAuth Debug Start ===');
-                Log::info('Token Exchange URL: ' . $tokenUrl);
-                Log::info('Client ID: ' . $clientId);
-                Log::info('Client Secret Length: ' . strlen($clientSecret));
-                Log::info('Redirect URI: ' . $redirectUri);
-                Log::info('Authorization Code: ' . $code);
-                Log::info('Authorization Code Length: ' . strlen($code));
-                Log::info('Grant Type: ' . $params['grant_type']);
-                Log::info('Full Parameters: ', $params);
-                
                 try {
                     $response = $client->post($tokenUrl, [
                         'form_params' => $params
                     ]);
                     
-                    $responseBody = $response->getBody()->getContents();
-                    Log::info('Instagram Token Response: ' . $responseBody);
-                    Log::info('=== Instagram OAuth Debug End ===');
-                    
-                    return json_decode($responseBody, true);
+                    return json_decode($response->getBody()->getContents(), true);
                     
                 } catch (\GuzzleHttp\Exception\ClientException $e) {
                     $responseBody = $e->getResponse()->getBody()->getContents();
                     Log::error('Instagram OAuth Error Response: ' . $responseBody);
                     Log::error('HTTP Status: ' . $e->getResponse()->getStatusCode());
-                    Log::error('=== Instagram OAuth Debug End ===');
                     throw $e;
                 }
                 break;

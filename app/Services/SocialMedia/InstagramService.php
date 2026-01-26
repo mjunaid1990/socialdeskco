@@ -44,7 +44,7 @@ class InstagramService extends BaseSocialMediaService
         ];
         
         $response = $this->makeApiRequest('post',
-            "https://graph.instagram.com/" . $this->getApiVersion('instagram', '21.0') . "/me/media",
+            "https://graph.instagram.com/" . $this->getApiVersion('instagram', '22.0') . "/me/media",
             $payload,
             ['Authorization' => 'Bearer ' . $this->getAccessToken($account)]
         );
@@ -78,7 +78,7 @@ class InstagramService extends BaseSocialMediaService
         ];
         
         $response = $this->makeApiRequest('post',
-            "https://graph.instagram.com/" . $this->getApiVersion('instagram', '21.0') . "/me/media",
+            "https://graph.instagram.com/" . $this->getApiVersion('instagram', '22.0') . "/me/media",
             $payload,
             ['Authorization' => 'Bearer ' . $this->getAccessToken($account)]
         );
@@ -107,14 +107,22 @@ class InstagramService extends BaseSocialMediaService
     {
         // Step 2: Publish the media container
         $publishResponse = $this->makeApiRequest('post',
-            "https://graph.instagram.com/" . $this->getApiVersion('instagram', '21.0') . "/me/media_publish",
+            "https://graph.instagram.com/" . $this->getApiVersion('instagram', '22.0') . "/me/media_publish",
             ['creation_id' => $creationId],
             ['Authorization' => 'Bearer ' . $this->getAccessToken($account)]
         );
 
         if ($publishResponse->successful()) {
             $publishData = $publishResponse->json();
-            $this->updatePostStatus($post, 'published', array_merge(['creation_id' => $creationId], $publishData));
+            $mediaId = $publishData['id'] ?? null;
+            
+            // Store media ID for deletion and other platform data
+            $platformData = array_merge([
+                'creation_id' => $creationId,
+                'media_id' => $mediaId,
+            ], $publishData);
+            
+            $this->updatePostStatus($post, 'published', $platformData);
             return $publishData;
         } else {
             return $this->handleApiError($post, 'Instagram publish ' . $mediaType, $publishResponse, ['creation_id' => $creationId]);
@@ -127,7 +135,7 @@ class InstagramService extends BaseSocialMediaService
         for ($attempt = 1; $attempt <= $maxAttempts; $attempt++) {
             // Check container status
             $statusResponse = $this->makeApiRequest('get',
-                "https://graph.instagram.com/" . $this->getApiVersion('instagram', '21.0') . "/{$creationId}",
+                "https://graph.instagram.com/" . $this->getApiVersion('instagram', '22.0') . "/{$creationId}",
                 ['fields' => 'status_code'],
                 ['Authorization' => 'Bearer ' . $this->getAccessToken($account)]
             );
@@ -168,6 +176,52 @@ class InstagramService extends BaseSocialMediaService
         $videoExtensions = ['mp4', 'mov', 'avi', 'wmv', 'flv', 'webm', 'mkv'];
         $extension = strtolower(pathinfo($url, PATHINFO_EXTENSION));
         return in_array($extension, $videoExtensions);
+    }
+
+    public function deletePost(Post $post, SocialAccount $account): bool
+    {
+        try {
+            // Get media ID from platform specific data
+            $platformData = $post->platform_specific_data ?? [];
+            $mediaId = $platformData['media_id'] ?? null;
+            
+            if (!$mediaId) {
+                $this->logApiError('Cannot delete Instagram post: No media ID', [
+                    'post_id' => $post->id,
+                    'platform_data' => $platformData,
+                    'error' => 'Media ID is required for deletion'
+                ]);
+                return false;
+            }
+
+            // Delete the media using Instagram Graph API
+            $response = $this->makeApiRequest('delete',
+                "https://graph.instagram.com/" . $this->getApiVersion('instagram', '22.0') . "/{$mediaId}",
+                [],
+                ['Authorization' => 'Bearer ' . $this->getAccessToken($account)]
+            );
+
+            if ($response->successful()) {
+                $responseData = $response->json();
+                
+                // Instagram returns {"success": true} on successful deletion
+                if ($responseData['success'] ?? false) {
+                    $this->updatePostStatus($post, 'deleted', $responseData);
+                    return true;
+                } else {
+                    $this->logApiError('Instagram post deletion failed', [
+                        'post_id' => $post->id,
+                        'media_id' => $mediaId,
+                        'response' => $responseData
+                    ]);
+                    return false;
+                }
+            } else {
+                return $this->handleApiError($post, 'Instagram delete post', $response);
+            }
+        } catch (\Exception $e) {
+            return $this->handleException($post, 'Instagram delete', $e);
+        }
     }
 
     public function refreshToken(SocialAccount $account): bool
