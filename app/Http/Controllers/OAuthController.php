@@ -274,7 +274,7 @@ class OAuthController extends Controller
                     Log::info('Instagram Token Response: ' . $responseBody);
                     Log::info('=== Instagram OAuth Debug End ===');
                     
-                    return $response;
+                    return json_decode($responseBody, true);
                     
                 } catch (\GuzzleHttp\Exception\ClientException $e) {
                     $responseBody = $e->getResponse()->getBody()->getContents();
