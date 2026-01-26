@@ -215,33 +215,37 @@ class OAuthController extends Controller
                         'client_secret' => $clientSecret,
                         'redirect_uri' => $redirectUri,
                         'code' => $code,
+                        'grant_type' => 'authorization_code',
                     ]
                 ]);
                 break;
 
             case 'instagram':
-                $tokenUrl = "https://api.instagram.com/oauth/access_token";
-                $params = [
-                    'client_id' => $clientId,
-                    'client_secret' => $clientSecret,
-                    'grant_type' => 'authorization_code',
-                    'redirect_uri' => $redirectUri,
-                    'code' => $code,
-                ];
+                $response = $client->post("https://api.instagram.com/oauth/access_token", [
+                    'form_params' => [
+                        'client_id' => $clientId,
+                        'client_secret' => $clientSecret,
+                        'grant_type' => 'authorization_code',
+                        'redirect_uri' => $redirectUri,
+                        'code' => $code,
+                    ]
+                ]);
                 
-                try {
-                    $response = $client->post($tokenUrl, [
-                        'form_params' => $params
-                    ]);
-                    
-                    return json_decode($response->getBody()->getContents(), true);
-                    
-                } catch (\GuzzleHttp\Exception\ClientException $e) {
-                    $responseBody = $e->getResponse()->getBody()->getContents();
-                    Log::error('Instagram OAuth Error Response: ' . $responseBody);
-                    Log::error('HTTP Status: ' . $e->getResponse()->getStatusCode());
-                    throw $e;
-                }
+                $tokenData = json_decode($response->getBody()->getContents(), true);
+                
+                // Exchange short-lived token for long-lived token
+                $longLivedResponse = $client->get("https://graph.instagram.com/access_token", [
+                    'query' => [
+                        'grant_type' => 'ig_exchange_token',
+                        'client_secret' => $clientSecret,
+                        'access_token' => $tokenData['access_token'],
+                    ]
+                ]);
+                
+                $longLivedData = json_decode($longLivedResponse->getBody()->getContents(), true);
+                
+                // Merge the data, preferring long-lived token info
+                return array_merge($tokenData, $longLivedData);
                 break;
 
             case 'linkedin':
@@ -312,13 +316,64 @@ class OAuthController extends Controller
                 break;
 
             case 'instagram':
-                // Use Instagram Graph API directly for Business Login
-                $response = $client->get("https://graph.instagram.com/me", [
-                    'query' => [
-                        'fields' => 'id,username,name,profile_picture_url,followers_count,media_count,account_type',
-                        'access_token' => $accessToken,
-                    ]
-                ]);
+                // For Instagram Business accounts, we need to get the Instagram Business ID from Facebook pages
+                try {
+                    // First get Facebook pages
+                    $pagesResponse = $client->get("https://graph.facebook.com/v22.0/me/accounts", [
+                        'query' => [
+                            'access_token' => $accessToken,
+                        ]
+                    ]);
+                    
+                    $pagesData = json_decode($pagesResponse->getBody()->getContents(), true);
+                    
+                    // Find the "Social Desk" page
+                    $socialDeskPage = null;
+                    foreach ($pagesData['data'] ?? [] as $page) {
+                        if (strpos(strtolower($page['name'] ?? ''), 'social desk') !== false) {
+                            $socialDeskPage = $page;
+                            break;
+                        }
+                    }
+                    
+                    if (!$socialDeskPage) {
+                        throw new \Exception('Social Desk Facebook page not found');
+                    }
+                    
+                    // Get Instagram Business Account from the page
+                    $igResponse = $client->get("https://graph.facebook.com/v22.0/{$socialDeskPage['id']}", [
+                        'query' => [
+                            'fields' => 'instagram_business_account',
+                            'access_token' => $accessToken,
+                        ]
+                    ]);
+                    
+                    $igData = json_decode($igResponse->getBody()->getContents(), true);
+                    
+                    if (!isset($igData['instagram_business_account']['id'])) {
+                        throw new \Exception('No Instagram Business Account connected to Social Desk page');
+                    }
+                    
+                    // Get Instagram Business profile details
+                    $igProfileResponse = $client->get("https://graph.facebook.com/v22.0/" . $igData['instagram_business_account']['id'], [
+                        'query' => [
+                            'fields' => 'id,username,name,profile_picture_url,followers_count,media_count,account_type',
+                            'access_token' => $accessToken,
+                        ]
+                    ]);
+                    
+                    $profileData = json_decode($igProfileResponse->getBody()->getContents(), true);
+                    
+                    // Add Facebook Page info for reference
+                    $profileData['facebook_page_id'] = $socialDeskPage['id'];
+                    $profileData['facebook_page_name'] = $socialDeskPage['name'];
+                    
+                    return $profileData;
+                    
+                } catch (\Exception $e) {
+                    Log::error('Failed to get Instagram Business Account from Facebook: ' . $e->getMessage());
+                    throw new \Exception('Failed to retrieve Instagram Business Account. Please ensure your Instagram Business account is connected to your Social Desk Facebook page.');
+                }
                 break;
 
             case 'linkedin':

@@ -228,32 +228,35 @@ class InstagramService extends BaseSocialMediaService
 
     private function getInstagramUserId(SocialAccount $account): string
     {
-        // Get Instagram User ID from platform specific data or account data
+        // Get Instagram Business ID from profile data (from Facebook Graph API)
+        $profileData = $account->profile_data ?? [];
+        
+        // The correct Instagram Business ID should be stored in profile_data['id']
+        // This comes from Facebook Graph API: /{page-id}?fields=instagram_business_account
+        if (isset($profileData['id'])) {
+            return $profileData['id'];
+        }
+        
+        // Check platform specific data as fallback
         $platformData = $account->platform_specific_data ?? [];
-        
-        // Check if we have the Instagram user ID stored
-        if (isset($platformData['instagram_user_id'])) {
-            return $platformData['instagram_user_id'];
+        if (isset($platformData['instagram_business_id'])) {
+            return $platformData['instagram_business_id'];
         }
         
-        // Check if it's in the account data (from OAuth response)
-        if (isset($platformData['id'])) {
-            return $platformData['id'];
-        }
-        
-        // Fallback to account provider_id if available
-        if ($account->provider_id) {
+        // Fallback to provider_id if it contains the correct IG Business ID
+        if ($account->provider_id && strlen($account->provider_id) > 15) {
             return $account->provider_id;
         }
         
-        // Last resort - try to extract from access token or use a default
-        // This should be updated when OAuth is properly implemented
-        Log::warning('Instagram User ID not found, using fallback', [
+        // Log error and throw exception - this should never happen with proper setup
+        Log::error('Instagram Business ID not found - account may not be properly connected', [
             'account_id' => $account->id,
-            'platform_data' => $platformData
+            'profile_data' => $profileData,
+            'platform_data' => $platformData,
+            'provider_id' => $account->provider_id,
         ]);
         
-        return 'me'; // This will fail but provides a fallback
+        throw new \Exception('Instagram Business ID not found. Please reconnect your Instagram account.');
     }
 
     public function refreshToken(SocialAccount $account): bool
