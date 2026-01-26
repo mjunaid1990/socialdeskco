@@ -217,14 +217,27 @@ class OAuthController extends Controller
                 break;
 
             case 'instagram':
-                $response = $client->post("https://api.instagram.com/oauth/access_token", [
-                    'form_params' => [
-                        'client_id' => $clientId,
-                        'client_secret' => $clientSecret,
-                        'grant_type' => 'authorization_code',
-                        'redirect_uri' => $redirectUri,
-                        'code' => $code,
-                    ]
+                $tokenUrl = "https://api.instagram.com/oauth/access_token";
+                $params = [
+                    'client_id' => $clientId,
+                    'client_secret' => $clientSecret,
+                    'grant_type' => 'authorization_code',
+                    'redirect_uri' => $redirectUri,
+                    'code' => $code,
+                ];
+                
+                // Debug logging
+                Log::info('Instagram Token Exchange Debug:', [
+                    'url' => $tokenUrl,
+                    'params' => $params,
+                    'client_id_length' => strlen($clientId),
+                    'client_secret_length' => strlen($clientSecret),
+                    'redirect_uri' => $redirectUri,
+                    'code_length' => strlen($code),
+                ]);
+                
+                $response = $client->post($tokenUrl, [
+                    'form_params' => $params
                 ]);
                 break;
 
