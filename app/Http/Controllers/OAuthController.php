@@ -74,13 +74,24 @@ class OAuthController extends Controller
 
             case 'instagram':
                 $scope = 'instagram_business_basic,instagram_business_content_publish';
-                return "https://api.instagram.com/oauth/authorize?" . http_build_query([
+                $oauthUrl = "https://api.instagram.com/oauth/authorize?" . http_build_query([
                     'client_id' => $clientId,
                     'redirect_uri' => $redirectUri,
                     'scope' => $scope,
                     'response_type' => 'code',
                     'state' => $state,
                 ]);
+                
+                // Debug Instagram OAuth URL
+                Log::info('=== Instagram OAuth URL Debug ===');
+                Log::info('Client ID: ' . $clientId);
+                Log::info('Redirect URI: ' . $redirectUri);
+                Log::info('Scope: ' . $scope);
+                Log::info('State: ' . $state);
+                Log::info('Full OAuth URL: ' . $oauthUrl);
+                Log::info('=== Instagram OAuth URL Debug End ===');
+                
+                return $oauthUrl;
 
             case 'linkedin':
                 return "https://www.linkedin.com/oauth/v2/authorization?" . http_build_query([
@@ -126,6 +137,13 @@ class OAuthController extends Controller
     public function callback($platform, Request $request)
     {
         $platform = strtolower($platform);
+        
+        // Debug callback request
+        Log::info("=== OAuth Callback Debug for {$platform} ===");
+        Log::info('Request Data: ', $request->all());
+        Log::info('Has Code: ' . ($request->has('code') ? 'YES' : 'NO'));
+        Log::info('Has Error: ' . ($request->has('error') ? 'YES' : 'NO'));
+        Log::info('Has State: ' . ($request->has('state') ? 'YES' : 'NO'));
         
         try {
             // Validate state parameter for security
@@ -226,19 +244,33 @@ class OAuthController extends Controller
                     'code' => $code,
                 ];
                 
-                // Debug logging
-                Log::info('Instagram Token Exchange Debug:', [
-                    'url' => $tokenUrl,
-                    'params' => $params,
-                    'client_id_length' => strlen($clientId),
-                    'client_secret_length' => strlen($clientSecret),
-                    'redirect_uri' => $redirectUri,
-                    'code_length' => strlen($code),
-                ]);
+                // Comprehensive debugging
+                Log::info('=== Instagram OAuth Debug Start ===');
+                Log::info('Token Exchange URL: ' . $tokenUrl);
+                Log::info('Client ID: ' . $clientId);
+                Log::info('Client Secret Length: ' . strlen($clientSecret));
+                Log::info('Redirect URI: ' . $redirectUri);
+                Log::info('Authorization Code: ' . $code);
+                Log::info('Authorization Code Length: ' . strlen($code));
+                Log::info('Grant Type: ' . $params['grant_type']);
+                Log::info('Full Parameters: ', $params);
                 
-                $response = $client->post($tokenUrl, [
-                    'form_params' => $params
-                ]);
+                try {
+                    $response = $client->post($tokenUrl, [
+                        'form_params' => $params
+                    ]);
+                    
+                    $responseBody = $response->getBody()->getContents();
+                    Log::info('Instagram Token Response: ' . $responseBody);
+                    Log::info('=== Instagram OAuth Debug End ===');
+                    
+                } catch (\GuzzleHttp\Exception\ClientException $e) {
+                    $responseBody = $e->getResponse()->getBody()->getContents();
+                    Log::error('Instagram OAuth Error Response: ' . $responseBody);
+                    Log::error('HTTP Status: ' . $e->getResponse()->getStatusCode());
+                    Log::error('=== Instagram OAuth Debug End ===');
+                    throw $e;
+                }
                 break;
 
             case 'linkedin':
