@@ -32,20 +32,13 @@ class InstagramService extends BaseSocialMediaService
                 return $this->publishPhoto($post, $account, $mediaUrl);
             }
         } catch (\Exception $e) {
-            // Check if it's a token expiration error and try to refresh
-            if ($this->isTokenExpiredError($e)) {
-                if ($this->refreshToken($account)) {
-                    // Retry the post after successful token refresh
-                    return $this->publishPost($post, $account);
-                }
-            }
             return $this->handleException($post, 'Instagram', $e);
         }
     }
 
     private function publishPhoto(Post $post, SocialAccount $account, string $imageUrl)
     {
-        // Step 1: Create media container for image
+        // Step 1: Create media container for image using Facebook Graph API
         $payload = [
             'caption' => $post->content,
             'image_url' => $imageUrl,
@@ -53,7 +46,7 @@ class InstagramService extends BaseSocialMediaService
         ];
         
         $response = $this->makeApiRequest('post',
-            "https://graph.instagram.com/" . $this->getApiVersion('instagram', '22.0') . "/me/media",
+            "https://graph.facebook.com/" . $this->getApiVersion('instagram', '22.0') . "/" . $this->getInstagramUserId($account) . "/media",
             $payload,
             ['Authorization' => 'Bearer ' . $this->getAccessToken($account)]
         );
@@ -73,13 +66,13 @@ class InstagramService extends BaseSocialMediaService
                 return false;
             }
         } else {
-            return $this->handleApiError($post, 'Instagram create photo', $response);
+            return $this->handleApiError($post, 'Instagram create photo', $response, ['creation_id' => $creationId], $account);
         }
     }
 
     private function publishVideo(Post $post, SocialAccount $account, string $videoUrl)
     {
-        // Step 1: Create media container for video
+        // Step 1: Create media container for video using Facebook Graph API
         $payload = [
             'caption' => $post->content,
             'video_url' => $videoUrl,
@@ -87,7 +80,7 @@ class InstagramService extends BaseSocialMediaService
         ];
         
         $response = $this->makeApiRequest('post',
-            "https://graph.instagram.com/" . $this->getApiVersion('instagram', '22.0') . "/me/media",
+            "https://graph.facebook.com/" . $this->getApiVersion('instagram', '22.0') . "/" . $this->getInstagramUserId($account) . "/media",
             $payload,
             ['Authorization' => 'Bearer ' . $this->getAccessToken($account)]
         );
@@ -108,15 +101,15 @@ class InstagramService extends BaseSocialMediaService
                 return false;
             }
         } else {
-            return $this->handleApiError($post, 'Instagram create video', $response);
+            return $this->handleApiError($post, 'Instagram create video', $response, ['creation_id' => $creationId], $account);
         }
     }
 
     private function publishMediaContainer(Post $post, SocialAccount $account, string $creationId, string $mediaType)
     {
-        // Step 2: Publish the media container
+        // Step 2: Publish the media container using Facebook Graph API
         $publishResponse = $this->makeApiRequest('post',
-            "https://graph.instagram.com/" . $this->getApiVersion('instagram', '22.0') . "/me/media_publish",
+            "https://graph.facebook.com/" . $this->getApiVersion('instagram', '22.0') . "/" . $this->getInstagramUserId($account) . "/media_publish",
             ['creation_id' => $creationId],
             ['Authorization' => 'Bearer ' . $this->getAccessToken($account)]
         );
@@ -134,7 +127,7 @@ class InstagramService extends BaseSocialMediaService
             $this->updatePostStatus($post, 'published', $platformData);
             return $publishData;
         } else {
-            return $this->handleApiError($post, 'Instagram publish ' . $mediaType, $publishResponse, ['creation_id' => $creationId]);
+            return $this->handleApiError($post, 'Instagram publish ' . $mediaType, $publishResponse, ['creation_id' => $creationId], $account);
         }
     }
 
@@ -142,9 +135,9 @@ class InstagramService extends BaseSocialMediaService
     {
         // Instagram videos need time to process before publishing
         for ($attempt = 1; $attempt <= $maxAttempts; $attempt++) {
-            // Check container status
+            // Check container status using Facebook Graph API
             $statusResponse = $this->makeApiRequest('get',
-                "https://graph.instagram.com/" . $this->getApiVersion('instagram', '22.0') . "/{$creationId}",
+                "https://graph.facebook.com/" . $this->getApiVersion('instagram', '22.0') . "/{$creationId}",
                 ['fields' => 'status_code'],
                 ['Authorization' => 'Bearer ' . $this->getAccessToken($account)]
             );
@@ -203,9 +196,9 @@ class InstagramService extends BaseSocialMediaService
                 return false;
             }
 
-            // Delete the media using Instagram Graph API
+            // Delete the media using Facebook Graph API
             $response = $this->makeApiRequest('delete',
-                "https://graph.instagram.com/" . $this->getApiVersion('instagram', '22.0') . "/{$mediaId}",
+                "https://graph.facebook.com/" . $this->getApiVersion('instagram', '22.0') . "/{$mediaId}",
                 [],
                 ['Authorization' => 'Bearer ' . $this->getAccessToken($account)]
             );
@@ -226,51 +219,52 @@ class InstagramService extends BaseSocialMediaService
                     return false;
                 }
             } else {
-                return $this->handleApiError($post, 'Instagram delete post', $response);
+                return $this->handleApiError($post, 'Instagram delete post', $response, ['media_id' => $mediaId], $account);
             }
         } catch (\Exception $e) {
             return $this->handleException($post, 'Instagram delete', $e);
         }
     }
 
-    private function isTokenExpiredError(\Exception $e): bool
+    private function getInstagramUserId(SocialAccount $account): string
     {
-        $message = $e->getMessage();
+        // Get Instagram User ID from platform specific data or account data
+        $platformData = $account->platform_specific_data ?? [];
         
-        // Check for common token expiration error messages
-        $tokenExpiredPatterns = [
-            'Error validating access token',
-            'Session has expired',
-            'Invalid OAuth access token',
-            'The access token expired',
-            'token has expired',
-        ];
-        
-        foreach ($tokenExpiredPatterns as $pattern) {
-            if (stripos($message, $pattern) !== false) {
-                return true;
-            }
+        // Check if we have the Instagram user ID stored
+        if (isset($platformData['instagram_user_id'])) {
+            return $platformData['instagram_user_id'];
         }
         
-        // Also check response data if available
-        if (method_exists($e, 'getResponse') && $e->getResponse()) {
-            $responseData = json_decode($e->getResponse()->getBody()->getContents(), true);
-            if (isset($responseData['error']['message']) && 
-                stripos($responseData['error']['message'], 'access token') !== false) {
-                return true;
-            }
+        // Check if it's in the account data (from OAuth response)
+        if (isset($platformData['id'])) {
+            return $platformData['id'];
         }
         
-        return false;
+        // Fallback to account provider_id if available
+        if ($account->provider_id) {
+            return $account->provider_id;
+        }
+        
+        // Last resort - try to extract from access token or use a default
+        // This should be updated when OAuth is properly implemented
+        Log::warning('Instagram User ID not found, using fallback', [
+            'account_id' => $account->id,
+            'platform_data' => $platformData
+        ]);
+        
+        return 'me'; // This will fail but provides a fallback
     }
 
     public function refreshToken(SocialAccount $account): bool
     {
         try {
-            // Instagram token refresh uses GET request with query parameters
-            $response = Http::get("https://graph.instagram.com/" . $this->getApiVersion('instagram', '22.0') . "/refresh_access_token", [
-                'grant_type' => 'ig_refresh_token',
-                'access_token' => $this->getAccessToken($account),
+            // For Instagram Business accounts using Facebook Login, use Facebook token refresh
+            $response = Http::asForm()->post('https://graph.facebook.com/oauth/access_token', [
+                'grant_type' => 'fb_exchange_token',
+                'client_id' => $this->getClientId('facebook'), // Use Facebook client ID
+                'client_secret' => $this->getClientSecret('facebook'), // Use Facebook client secret
+                'fb_exchange_token' => $this->getAccessToken($account),
             ]);
 
             if ($response->successful()) {
@@ -285,14 +279,14 @@ class InstagramService extends BaseSocialMediaService
                         : $account->token_expires_at,
                 ]);
 
-                Log::info('Instagram token refreshed successfully', [
+                Log::info('Instagram token refreshed successfully via Facebook', [
                     'account_id' => $account->id,
                     'new_expires_at' => $account->token_expires_at,
                 ]);
 
                 return true;
             } else {
-                Log::error('Instagram token refresh failed', [
+                Log::error('Instagram token refresh failed via Facebook', [
                     'status_code' => $response->status(),
                     'response' => $response->json(),
                     'account_id' => $account->id,

@@ -34,7 +34,46 @@ abstract class BaseSocialMediaService implements SocialMediaPlatformInterface
             ->{$method}($url, $payload);
     }
 
-    protected function handleApiError(Post $post, string $platform, $response, array $additionalContext = []): bool
+    protected function isTokenExpiredError(array $errorData): bool
+    {
+        // Check for common token expiration error codes and messages
+        $tokenExpiredPatterns = [
+            'error.code' => [190, 190], // Facebook/Instagram OAuth error code
+            'error.message' => [
+                'Error validating access token',
+                'Session has expired',
+                'Invalid OAuth access token',
+                'The access token expired',
+                'token has expired',
+                'Invalid OAuth access token - Cannot parse access token',
+            ]
+        ];
+
+        // Check error code
+        if (isset($errorData['error']['code']) && in_array($errorData['error']['code'], [190, 401])) {
+            return true;
+        }
+
+        // Check error message
+        if (isset($errorData['error']['message'])) {
+            $message = $errorData['error']['message'];
+            foreach ($tokenExpiredPatterns['error.message'] as $pattern) {
+                if (stripos($message, $pattern) !== false) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    protected function getPlatformService(string $platform): ?SocialMediaPlatformInterface
+    {
+        $factory = new \App\Services\SocialMedia\SocialMediaServiceFactory();
+        return $factory->create($platform);
+    }
+
+    protected function handleApiError(Post $post, string $platform, $response, array $additionalContext = [], ?SocialAccount $account = null): bool
     {
         $errorData = $response->json() ?? [];
         $context = array_merge([
@@ -42,6 +81,34 @@ abstract class BaseSocialMediaService implements SocialMediaPlatformInterface
             'status_code' => $response->status(),
             'post_id' => $post->id
         ], $additionalContext);
+
+        // Check for token expiration errors
+        if ($this->isTokenExpiredError($errorData) && $account) {
+            Log::warning('Token expired, attempting refresh...', [
+                'platform' => $platform,
+                'post_id' => $post->id,
+                'account_id' => $account->id,
+            ]);
+
+            // Get the appropriate service for token refresh
+            $service = $this->getPlatformService($platform);
+            if ($service && $service->refreshToken($account)) {
+                Log::info('Token refreshed successfully, retrying post...', [
+                    'platform' => $platform,
+                    'post_id' => $post->id,
+                    'account_id' => $account->id,
+                ]);
+                
+                // Retry the post once after successful token refresh
+                return $service->publishPost($post, $account);
+            } else {
+                Log::error('Token refresh failed', [
+                    'platform' => $platform,
+                    'post_id' => $post->id,
+                    'account_id' => $account->id,
+                ]);
+            }
+        }
 
         $this->logApiError($platform, $context);
         $this->updatePostStatus($post, 'failed', $errorData);
