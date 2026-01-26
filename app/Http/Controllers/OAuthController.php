@@ -219,6 +219,7 @@ class OAuthController extends Controller
         $clientId = SettingsHelper::getSocialMediaSetting($platform, 'client_id');
         $clientSecret = SettingsHelper::getSocialMediaSetting($platform, 'client_secret');
         $redirectUri = route('oauth.callback', $platform);
+        echo $redirectUri;die;
 
         $client = new Client();
 
