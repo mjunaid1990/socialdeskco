@@ -85,7 +85,7 @@
                         <div class="flex-shrink-0 flex items-center">
                             @if(App\Helpers\SettingsHelper::get('app_logo'))
                                 <img src="{{ App\Helpers\SettingsHelper::get('app_logo') }}" alt="{{ config('app.name', 'Laravel') }}" 
-                                    class="h-20 max-w-xs">
+                                    class="h-[20px] max-w-xs">
                             @else
                                 <div class="w-12 h-20 bg-white/20 rounded-lg flex items-center justify-center">
                                     <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -297,6 +297,30 @@
                 }).showToast();
             };
         </script>
+        
+        <!-- Flash Messages Handler -->
+        @if(session()->has('success') || session()->has('error') || session()->has('warning') || session()->has('info'))
+            <script>
+                document.addEventListener('DOMContentLoaded', function() {
+                    @if(session()->has('success'))
+                        window.showToast('{{ session('success') }}', 'success');
+                    @endif
+                    
+                    @if(session()->has('error'))
+                        window.showToast('{{ session('error') }}', 'error');
+                    @endif
+                    
+                    @if(session()->has('warning'))
+                        window.showToast('{{ session('warning') }}', 'warning');
+                    @endif
+                    
+                    @if(session()->has('info'))
+                        window.showToast('{{ session('info') }}', 'info');
+                    @endif
+                });
+            </script>
+        @endif
+        
         @stack('scripts')
     </div>
 </body>

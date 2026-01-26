@@ -33,16 +33,28 @@ class PublishPostJob implements ShouldQueue
         $jobClass = static::class;
         
         try {
+            // Update post status to processing
+            $this->post->update(['status' => 'processing']);
+            
+            // Validate that post has social accounts
+            $socialAccounts = $this->post->socialAccounts;
+            if ($socialAccounts->isEmpty()) {
+                Log::warning("Post {$this->post->id} has no social accounts assigned");
+                $this->post->update([
+                    'status' => 'failed',
+                    'platform_specific_data' => ['error' => 'No social accounts assigned']
+                ]);
+                return;
+            }
+            
             $result = $monitor->measureCallback('job_publish_post', function() use ($socialMediaService) {
-                // Update post status to processing
-                $this->post->update(['status' => 'processing']);
-                
-                // Publish the post using the service
+                // Publish the post using the service (handles multiple accounts)
                 return $socialMediaService->publishPost($this->post);
             });
             
             if ($result) {
-                Log::info("Successfully published post {$this->post->id} to {$this->post->socialAccount->platform}");
+                $platforms = $socialAccounts->pluck('platform')->implode(', ');
+                Log::info("Successfully published post {$this->post->id} to: {$platforms}");
                 $monitor->recordJobProcessing($jobClass, $monitor->getMetrics()['job_publish_post']['duration'] ?? 0, true);
             } else {
                 Log::warning("Failed to publish post {$this->post->id}");

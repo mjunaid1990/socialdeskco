@@ -5,9 +5,12 @@ namespace App\Http\Controllers\Backend;
 use App\Http\Controllers\Controller;
 use App\Models\Post;
 use App\Models\SocialAccount;
+use App\Jobs\PublishPostJob;
 use App\Services\AiService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
+use App\Services\SocialMediaService;
 
 class PostController extends Controller
 {
@@ -32,7 +35,7 @@ class PostController extends Controller
      */
     public function create()
     {
-        $socialAccounts = SocialAccount::where('user_id', Auth::id())->get();
+        $socialAccounts = SocialAccount::where('user_id', Auth::id())->where('is_active', true)->get();
         $post = new Post();
         return view('backend.posts.create', compact('socialAccounts', 'post'));
     }
@@ -42,15 +45,35 @@ class PostController extends Controller
      */
     public function store(Request $request)
     {
+        // Debug logging
+        Log::info('Post creation request data:', [
+            'all_data' => $request->all(),
+            'has_files' => $request->hasFile('media'),
+            'files_count' => $request->hasFile('media') ? (is_array($request->file('media')) ? count($request->file('media')) : 1) : 0,
+            'files' => $request->hasFile('media') ? array_map(function($file) {
+                return [
+                    'original_name' => $file->getClientOriginalName(),
+                    'size' => $file->getSize(),
+                    'mime_type' => $file->getMimeType(),
+                    'is_valid' => $file->isValid(),
+                    'error' => $file->getError()
+                ];
+            }, is_array($request->file('media')) ? $request->file('media') : [$request->file('media')]) : [],
+            'social_accounts' => $request->social_accounts ?? []
+        ]);
+
         $request->validate([
             'title' => 'required|string|max:255',
-            'content' => 'required|string',
-            'social_account_id' => 'required|exists:social_accounts,id',
+            'description' => 'required|string',
+            'platforms' => 'required|array|min:1',
+            'platforms.*' => 'exists:social_accounts,id',
             'status' => 'required|in:draft,scheduled,published',
             'scheduled_at' => 'nullable|date',
-            'media_files' => 'nullable|array',
-            'media_files.*' => 'string',
+            'media' => 'nullable|array',
+            'media.*' => 'file|max:10240', // Max 10MB per file
         ]);
+
+        Log::info('Validation passed, proceeding with post creation');
 
         // Convert scheduled_at to UTC if provided
         $scheduledAt = $request->scheduled_at;
@@ -60,23 +83,122 @@ class PostController extends Controller
             );
         }
 
-        $post = new Post();
-        $post->user_id = Auth::id();
-        $post->social_account_id = $request->social_account_id;
-        $post->title = $request->title;
-        $post->content = $request->content;
-        $post->status = $request->status;
-        $post->scheduled_at = $scheduledAt;
-        $post->media_files = $request->media_files;
-        $post->save();
+        try {
+            Log::info('Creating new post object');
+            $post = new Post();
+            $post->user_id = Auth::id();
+            $post->title = $request->title;
+            $post->content = $request->description;
+            $post->status = $request->status;
+            $post->scheduled_at = $scheduledAt;
+            
+            // social_account_id is now nullable - we'll use many-to-many relationship instead
+            
+            Log::info('Post object created, processing media files', [
+                'post_data' => [
+                    'user_id' => $post->user_id,
+                    'title' => $post->title,
+                    'content' => $post->content,
+                    'status' => $post->status,
+                    'scheduled_at' => $post->scheduled_at
+                ]
+            ]);
+            
+            // Handle media file uploads
+            $mediaFiles = [];
+            if ($request->hasFile('media')) {
+                $files = $request->file('media');
+                // Ensure we have an array even for single file uploads
+                if (!is_array($files)) {
+                    $files = [$files];
+                }
+                
+                Log::info('Processing media files', ['files_count' => count($files)]);
+                
+                foreach ($files as $file) {
+                    if ($file && $file->isValid()) {
+                        // Store file in public storage
+                        $path = $file->store('media', 'public');
+                        // Get full URL for the file
+                        $url = asset('storage/' . $path);
+                        $mediaFiles[] = $url;
+                        
+                        Log::info('Media file uploaded:', [
+                            'original_name' => $file->getClientOriginalName(),
+                            'path' => $path,
+                            'url' => $url,
+                            'size' => $file->getSize()
+                        ]);
+                    }
+                }
+            }
+            
+            $post->media_files = $mediaFiles;
+            
+            Log::info('Saving post to database', [
+                'media_files' => $mediaFiles,
+                'media_files_count' => count($mediaFiles)
+            ]);
+            
+            if(!$post->save()) {
+                Log::error('Failed to save post to database');
+                return redirect()->back()->with('error', 'Failed to create post. Please try again.')->withInput();
+            }
+            
+            Log::info('Post saved successfully with ID: ' . $post->id, [
+                'media_files_count' => count($mediaFiles),
+                'media_files' => $mediaFiles
+            ]);
 
-        // If status is scheduled and time is now or past, dispatch job
-        if ($request->status === 'scheduled' && $scheduledAt && $scheduledAt->isPast()) {
-            PublishPostJob::dispatch($post);
-            $post->update(['status' => 'processing']);
+            // Attach social accounts to post (many-to-many relationship)
+            $socialAccountIds = $request->platforms;
+            Log::info('Attaching social accounts to post', [
+                'post_id' => $post->id,
+                'social_account_ids' => $socialAccountIds
+            ]);
+            
+            $post->socialAccounts()->attach($socialAccountIds);
+
+            // Handle immediate publishing
+            if ($request->status === 'published') {
+                // Dispatch job immediately for published posts
+                PublishPostJob::dispatch($post);
+                \Log::info('PublishPostJob dispatched immediately for post ID: ' . $post->id);
+            }
+            // If status is scheduled and time is now or past, dispatch job
+            elseif ($request->status === 'scheduled' && $scheduledAt && $scheduledAt->isPast()) {
+                PublishPostJob::dispatch($post);
+                $post->update(['status' => 'processing']);
+                \Log::info('PublishPostJob dispatched for post ID: ' . $post->id);
+            }
+
+            // Handle AJAX requests
+            if ($request->ajax() || $request->wantsJson()) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Post created successfully!',
+                    'redirect' => route('admin.posts.index')
+                ]);
+            }
+            
+            return redirect()->route('admin.posts.index')->with('success', 'Post created successfully!');
+            
+        } catch (\Exception $e) {
+            \Log::error('Error creating post: ' . $e->getMessage(), [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+            
+            // Handle AJAX requests
+            if ($request->ajax() || $request->wantsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'An error occurred while creating the post: ' . $e->getMessage()
+                ], 500);
+            }
+            
+            return redirect()->back()->with('error', 'An error occurred while creating the post.')->withInput();
         }
-
-        return redirect()->route('admin.posts.index')->with('success', 'Post created successfully.');
     }
 
     /**
@@ -116,14 +238,31 @@ class PostController extends Controller
             abort(403, 'Unauthorized access');
         }
 
+        // Debug logging
+        Log::info('Post update request data:', [
+            'post_id' => $post->id,
+            'all_data' => $request->all(),
+            'has_files' => $request->hasFile('media'),
+            'files_count' => $request->hasFile('media') ? (is_array($request->file('media')) ? count($request->file('media')) : 1) : 0,
+            'files' => $request->hasFile('media') ? array_map(function($file) {
+                return [
+                    'original_name' => $file->getClientOriginalName(),
+                    'size' => $file->getSize(),
+                    'mime_type' => $file->getMimeType(),
+                    'is_valid' => $file->isValid(),
+                    'error' => $file->getError()
+                ];
+            }, is_array($request->file('media')) ? $request->file('media') : [$request->file('media')]) : []
+        ]);
+
         $request->validate([
             'title' => 'required|string|max:255',
             'content' => 'required|string',
             'social_account_id' => 'required|exists:social_accounts,id',
             'status' => 'required|in:draft,scheduled,published',
             'scheduled_at' => 'nullable|date',
-            'media_files' => 'nullable|array',
-            'media_files.*' => 'string',
+            'media' => 'nullable|array',
+            'media.*' => 'file|max:10240', // Simplified validation for debugging
         ]);
 
         $post->social_account_id = $request->social_account_id;
@@ -131,7 +270,44 @@ class PostController extends Controller
         $post->content = $request->content;
         $post->status = $request->status;
         $post->scheduled_at = $request->scheduled_at;
-        $post->media_files = $request->media_files;
+        
+        // Handle media file uploads and existing media files
+        $mediaFiles = [];
+        
+        // First, handle existing media files that weren't removed
+        $existingMediaFiles = $request->input('existing_media_files', []);
+        if (is_array($existingMediaFiles)) {
+            $mediaFiles = $existingMediaFiles;
+        }
+        
+        // Then, handle newly uploaded files
+        if ($request->hasFile('media')) {
+            $files = $request->file('media');
+            // Ensure we have an array even for single file uploads
+            if (!is_array($files)) {
+                $files = [$files];
+            }
+            
+            foreach ($files as $file) {
+                if ($file && $file->isValid()) {
+                    // Store file in public storage
+                    $path = $file->store('media', 'public');
+                    // Get full URL for the file
+                    $url = asset('storage/' . $path);
+                    $mediaFiles[] = $url;
+                    
+                    Log::info('Media file uploaded during update:', [
+                        'post_id' => $post->id,
+                        'original_name' => $file->getClientOriginalName(),
+                        'path' => $path,
+                        'url' => $url,
+                        'size' => $file->getSize()
+                    ]);
+                }
+            }
+        }
+        
+        $post->media_files = $mediaFiles;
         $post->save();
 
         return redirect()->route('admin.posts.index')->with('success', 'Post updated successfully.');
@@ -146,10 +322,48 @@ class PostController extends Controller
         if ($post->user_id !== Auth::id() && !Auth::user()->isAdmin()) {
             abort(403, 'Unauthorized access');
         }
-
+        
+        // Delete from all connected social media platforms if published
+        if ($post->status === 'published') {
+            $socialAccounts = $post->socialAccounts;
+            foreach ($socialAccounts as $account) {
+                $this->deleteFromSocialMedia($post, $account);
+            }
+        }
+        
+        // Delete from local database
         $post->delete();
 
         return redirect()->route('admin.posts.index')->with('success', 'Post deleted successfully.');
+    }
+    
+    /**
+     * Delete post from social media platforms
+     */
+    private function deleteFromSocialMedia(Post $post, SocialAccount $account)
+    {
+        try {
+            if (!$account || !$account->is_active) {
+                Log::warning("Cannot delete from {$account->platform}: Account not found or inactive");
+                return false;
+            }
+            
+            Log::info("Deleting post {$post->id} from {$account->platform}");
+            
+            $socialMediaService = new SocialMediaService();
+            $result = $socialMediaService->deletePost($post, $account);
+            
+            if ($result) {
+                Log::info("Successfully deleted post {$post->id} from {$account->platform}");
+            } else {
+                Log::warning("Failed to delete post {$post->id} from {$account->platform}");
+            }
+        } catch (\Exception $e) {
+            Log::error("Error deleting post {$post->id} from social media: " . $e->getMessage(), [
+                'post_id' => $post->id,
+                'platform' => $account->platform ?? 'unknown'
+            ]);
+        }
     }
 
     /**

@@ -483,6 +483,201 @@
             variationsContainer.classList.add('hidden');
             aiResults.classList.remove('hidden');
         }
+        
+        // Function to remove existing media files
+        window.removeExistingMedia = function(index) {
+            const mediaItem = document.querySelector(`.existing-media-item[data-index="${index}"]`);
+            if (mediaItem) {
+                // Add fade out animation
+                mediaItem.style.transition = 'opacity 0.3s ease-out';
+                mediaItem.style.opacity = '0';
+                
+                setTimeout(() => {
+                    mediaItem.remove();
+                    
+                    // Check if there are any remaining media files
+                    const remainingItems = document.querySelectorAll('.existing-media-item');
+                    if (remainingItems.length === 0) {
+                        const existingMediaSection = document.getElementById('existing-media-files').parentElement;
+                        existingMediaSection.remove();
+                    }
+                }, 300);
+            }
+        };
+        
+        // Function to remove newly uploaded files (from create page)
+        window.removeFile = function(index) {
+            const mediaInput = document.getElementById('media');
+            const dt = new DataTransfer();
+            const files = Array.from(mediaInput.files);
+            files.splice(index, 1);
+            files.forEach(file => dt.items.add(file));
+            mediaInput.files = dt.files;
+            handleFiles(mediaInput.files);
+        };
+        
+        // Function to handle new file uploads (for edit page)
+        function handleFiles(files) {
+            const filePreviewContainer = document.getElementById('file-previews');
+            if (!filePreviewContainer) {
+                // Create preview container if it doesn't exist
+                const container = document.createElement('div');
+                container.className = 'mt-4 grid grid-cols-2 md:grid-cols-4 gap-4';
+                container.id = 'file-previews';
+                document.querySelector('.border-dashed').parentNode.insertBefore(container, document.querySelector('.border-dashed').nextSibling.nextSibling);
+            }
+            
+            // Clear existing previews
+            filePreviewContainer.innerHTML = '';
+            
+            if (files.length === 0) return;
+            
+            Array.from(files).forEach((file, index) => {
+                if (file.type.startsWith('image/')) {
+                    const reader = new FileReader();
+                    reader.onload = function(e) {
+                        const previewDiv = createImagePreview(e.target.result, file.name, index);
+                        filePreviewContainer.appendChild(previewDiv);
+                    };
+                    reader.readAsDataURL(file);
+                } else if (file.type.startsWith('video/')) {
+                    const reader = new FileReader();
+                    reader.onload = function(e) {
+                        const previewDiv = createVideoPreview(e.target.result, file.name, index);
+                        filePreviewContainer.appendChild(previewDiv);
+                    };
+                    reader.readAsDataURL(file);
+                } else {
+                    const previewDiv = createFilePreview(file.name, file.size, index);
+                    filePreviewContainer.appendChild(previewDiv);
+                }
+            });
+        }
+        
+        // Preview creation functions
+        function createImagePreview(src, fileName, index) {
+            const div = document.createElement('div');
+            div.className = 'relative group';
+            div.innerHTML = `
+                <div class="aspect-square rounded-lg overflow-hidden border border-gray-200">
+                    <img src="${src}" alt="${fileName}" class="w-full h-full object-cover">
+                    <div class="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-40 transition-all duration-200 flex items-center justify-center">
+                        <button type="button" onclick="removeFile(${index})" class="opacity-0 group-hover:opacity-100 bg-red-500 text-white rounded-full p-2 hover:bg-red-600 transition-all duration-200">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+                <p class="mt-1 text-xs text-gray-600 truncate">${fileName}</p>
+            `;
+            return div;
+        }
+        
+        function createVideoPreview(src, fileName, index) {
+            const div = document.createElement('div');
+            div.className = 'relative group';
+            div.innerHTML = `
+                <div class="aspect-square rounded-lg overflow-hidden border border-gray-200 bg-gray-100">
+                    <video src="${src}" class="w-full h-full object-cover" controls></video>
+                    <div class="absolute top-2 right-2">
+                        <button type="button" onclick="removeFile(${index})" class="bg-red-500 text-white rounded-full p-1 hover:bg-red-600 transition-all duration-200">
+                            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+                <p class="mt-1 text-xs text-gray-600 truncate">${fileName}</p>
+            `;
+            return div;
+        }
+        
+        function createFilePreview(fileName, fileSize, index) {
+            const div = document.createElement('div');
+            div.className = 'relative group';
+            const fileIcon = getFileIcon(fileName);
+            const fileSizeText = formatFileSize(fileSize);
+            div.innerHTML = `
+                <div class="aspect-square rounded-lg border border-gray-200 bg-gray-50 flex flex-col items-center justify-center p-4">
+                    <div class="text-3xl mb-2">${fileIcon}</div>
+                    <p class="text-xs text-gray-600 text-center truncate w-full">${fileName}</p>
+                    <p class="text-xs text-gray-400">${fileSizeText}</p>
+                    <button type="button" onclick="removeFile(${index})" class="absolute top-2 right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600 transition-all duration-200">
+                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                    </button>
+                </div>
+            `;
+            return div;
+        }
+        
+        function getFileIcon(fileName) {
+            const extension = fileName.split('.').pop().toLowerCase();
+            const iconMap = {
+                'pdf': '📄',
+                'doc': '📝', 'docx': '📝',
+                'xls': '📊', 'xlsx': '📊',
+                'ppt': '📈', 'pptx': '📈',
+                'txt': '📃',
+                'zip': '🗜️', 'rar': '🗜️',
+                'mp3': '🎵', 'wav': '🎵',
+                'default': '📎'
+            };
+            return iconMap[extension] || iconMap['default'];
+        }
+        
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+        
+        // Handle file selection for edit page
+        const mediaInput = document.getElementById('media');
+        if (mediaInput) {
+            mediaInput.addEventListener('change', function(e) {
+                handleFiles(e.target.files);
+            });
+        }
+        
+        // Handle drag and drop for edit page
+        const dropZone = document.querySelector('.border-dashed');
+        if (dropZone) {
+            ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+                dropZone.addEventListener(eventName, preventDefaults, false);
+            });
+            
+            function preventDefaults(e) {
+                e.preventDefault();
+                e.stopPropagation();
+            }
+            
+            ['dragenter', 'dragover'].forEach(eventName => {
+                dropZone.addEventListener(eventName, highlight, false);
+            });
+            
+            ['dragleave', 'drop'].forEach(eventName => {
+                dropZone.addEventListener(eventName, unhighlight, false);
+            });
+            
+            function highlight(e) {
+                dropZone.classList.add('border-blue-400', 'bg-blue-50');
+            }
+            
+            function unhighlight(e) {
+                dropZone.classList.remove('border-blue-400', 'bg-blue-50');
+            }
+            
+            dropZone.addEventListener('drop', function(e) {
+                const dt = e.dataTransfer;
+                const files = dt.files;
+                handleFiles(files);
+            }, false);
+        }
     });
 </script>
 @endsection

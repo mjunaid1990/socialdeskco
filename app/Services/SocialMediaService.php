@@ -5,26 +5,140 @@ namespace App\Services;
 use App\Models\SocialAccount;
 use App\Models\Post;
 use App\Services\SocialMedia\SocialMediaServiceFactory;
+use Illuminate\Support\Facades\Log;
 
 class SocialMediaService
 {
     public function publishPost(Post $post)
     {
-        $account = $post->socialAccount;
+        Log::info('SocialMediaService: Starting publishPost for post ID: ' . $post->id);
+        
+        // Get all social accounts for this post
+        $socialAccounts = $post->socialAccounts;
+        
+        if ($socialAccounts->isEmpty()) {
+            Log::error('SocialMediaService: No social accounts found for post ID: ' . $post->id);
+            $post->update([
+                'status' => 'failed',
+                'platform_specific_data' => ['error' => 'No social accounts found']
+            ]);
+            return false;
+        }
+        
+        Log::info('SocialMediaService: Found ' . $socialAccounts->count() . ' social accounts for post ID: ' . $post->id);
+        
+        $results = [];
+        $successCount = 0;
+        $failureCount = 0;
+        
+        foreach ($socialAccounts as $account) {
+            Log::info('SocialMediaService: Processing account for platform: ' . $account->platform . ' (ID: ' . $account->id . ')');
+            
+            try {
+                $platformService = SocialMediaServiceFactory::createForAccount($account);
+                Log::info('SocialMediaService: Created platform service for: ' . $account->platform);
+                
+                $result = $platformService->publishPost($post, $account);
+                $results[$account->id] = $result;
+                
+                // Handle different return types from platform services
+                if (is_string($result)) {
+                    // Platform service returned a video ID or other identifier
+                    $successCount++;
+                    Log::info('SocialMediaService: Successfully published to ' . $account->platform . ' (ID: ' . $account->id . ') with identifier: ' . $result);
+                } elseif ($result === true) {
+                    // Platform service returned true for success
+                    $successCount++;
+                    Log::info('SocialMediaService: Successfully published to ' . $account->platform . ' (ID: ' . $account->id . ')');
+                } else {
+                    // Platform service returned false for failure
+                    $failureCount++;
+                    Log::warning('SocialMediaService: Failed to publish to ' . $account->platform . ' (ID: ' . $account->id . ')');
+                }
+                
+            } catch (\Exception $e) {
+                $failureCount++;
+                $results[$account->id] = false;
+                
+                Log::error('SocialMediaService Error', [
+                    'error' => $e->getMessage(),
+                    'platform' => $account->platform,
+                    'account_id' => $account->id,
+                    'post_id' => $post->id,
+                    'trace' => $e->getTraceAsString()
+                ]);
+            }
+        }
+        
+        // Update post status based on results
+        if ($successCount > 0 && $failureCount === 0) {
+            // All successful
+            $post->update([
+                'status' => 'published',
+                'published_at' => now(),
+                'platform_specific_data' => [
+                    'results' => $results,
+                    'success_count' => $successCount,
+                    'failure_count' => $failureCount,
+                    'published_at' => now()->toISOString()
+                ]
+            ]);
+            
+            Log::info('SocialMediaService: All accounts published successfully for post ID: ' . $post->id);
+            return true;
+            
+        } elseif ($successCount > 0 && $failureCount > 0) {
+            // Partial success
+            $post->update([
+                'status' => 'published', // Still mark as published since some worked
+                'published_at' => now(),
+                'platform_specific_data' => [
+                    'results' => $results,
+                    'success_count' => $successCount,
+                    'failure_count' => $failureCount,
+                    'published_at' => now()->toISOString(),
+                    'partial_success' => true
+                ]
+            ]);
+            
+            Log::info('SocialMediaService: Partial success for post ID: ' . $post->id . ' (' . $successCount . ' successful, ' . $failureCount . ' failed)');
+            return true;
+            
+        } else {
+            // All failed
+            $post->update([
+                'status' => 'failed',
+                'platform_specific_data' => [
+                    'results' => $results,
+                    'success_count' => $successCount,
+                    'failure_count' => $failureCount,
+                    'error' => 'All social accounts failed to publish'
+                ]
+            ]);
+            
+            Log::error('SocialMediaService: All accounts failed to publish for post ID: ' . $post->id);
+            return false;
+        }
+    }
+
+    public function deletePost(Post $post, SocialAccount $account)
+    {
+        Log::info('SocialMediaService: Starting deletePost for post ID: ' . $post->id);
         
         try {
             $platformService = SocialMediaServiceFactory::createForAccount($account);
-            return $platformService->publishPost($post, $account);
+            Log::info('SocialMediaService: Created platform service for: ' . $account->platform);
+            
+            $result = $platformService->deletePost($post, $account);
+            Log::info('SocialMediaService: Platform service deletePost returned: ' . ($result ? 'true' : 'false'));
+            
+            return $result;
         } catch (\Exception $e) {
-            \Log::error('SocialMediaService Error', [
+            Log::error('SocialMediaService deletePost Error', [
                 'error' => $e->getMessage(),
                 'platform' => $account->platform,
-                'post_id' => $post->id
-            ]);
-            
-            $post->update([
-                'status' => 'failed',
-                'platform_specific_data' => ['error' => $e->getMessage()]
+                'post_id' => $post->id,
+                'trace' => $e->getTraceAsString()
             ]);
             
             return false;
@@ -34,6 +148,8 @@ class SocialMediaService
     private function publishToFacebook(Post $post, SocialAccount $account)
     {
         try {
+            Log::info('SocialMediaService: Starting publishToFacebook for post ID: ' . $post->id);
+            
             $payload = [
                 'message' => $post->content,
             ];

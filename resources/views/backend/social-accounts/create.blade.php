@@ -68,6 +68,9 @@
 
 <script>
 function openOAuthPopup(url, platform) {
+    console.log('Opening OAuth popup for:', platform);
+    console.log('OAuth URL:', url);
+    
     const width = 600;
     const height = 700;
     const left = (screen.width / 2) - (width / 2);
@@ -79,9 +82,19 @@ function openOAuthPopup(url, platform) {
         `width=${width},height=${height},left=${left},top=${top},scrollbars=yes,resizable=yes`
     );
     
+    if (!popup) {
+        console.error('Popup blocked! Please allow popups for this site.');
+        alert('Popup blocked! Please allow popups for this site and try again.');
+        return;
+    }
+    
+    console.log('Popup opened successfully');
+    
     // Poll for popup closure
     const checkClosed = setInterval(() => {
+        console.log('Checking if popup is closed...');
         if (popup.closed) {
+            console.log('Popup closed, redirecting to social accounts page');
             clearInterval(checkClosed);
             // Reload the page to show updated social accounts
             window.location.href = '{{ route("admin.social-accounts.index") }}';

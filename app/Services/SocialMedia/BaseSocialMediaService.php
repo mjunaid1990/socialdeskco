@@ -109,6 +109,17 @@ abstract class BaseSocialMediaService implements SocialMediaPlatformInterface
         $account->update($updateData);
     }
 
+    public function deletePost(Post $post, SocialAccount $account)
+    {
+        // Default implementation - override in specific platforms
+        Log::warning("Delete post not implemented for platform", [
+            'platform' => $this->getPlatformName(),
+            'post_id' => $post->id,
+            'account_id' => $account->id
+        ]);
+        return false;
+    }
+
     public function refreshToken(SocialAccount $account): bool
     {
         if (!$this->getRefreshToken($account)) {

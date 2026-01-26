@@ -8,6 +8,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Str;
 use GuzzleHttp\Client;
+use Illuminate\Support\Facades\Log;
 
 class OAuthController extends Controller
 {
@@ -62,9 +63,18 @@ class OAuthController extends Controller
 
         switch ($platform) {
             case 'facebook':
+                $scope = 'public_profile,pages_show_list,pages_manage_metadata,pages_read_engagement,pages_manage_posts';
+                return "https://www.facebook.com/v21.0/dialog/oauth?" . http_build_query([
+                    'client_id' => $clientId,
+                    'redirect_uri' => $redirectUri,
+                    'scope' => $scope,
+                    'response_type' => 'code',
+                    'state' => $state,
+                ]);
+
             case 'instagram':
-                $scope = 'pages_manage_posts,pages_read_engagement,instagram_basic,instagram_content_publish';
-                return "https://www.facebook.com/v18.0/dialog/oauth?" . http_build_query([
+                $scope = 'instagram_business_basic,instagram_business_manage_messages,instagram_business_manage_comments,instagram_business_content_publish';
+                return "https://www.instagram.com/oauth/authorize?" . http_build_query([
                     'client_id' => $clientId,
                     'redirect_uri' => $redirectUri,
                     'scope' => $scope,
@@ -94,6 +104,18 @@ class OAuthController extends Controller
                     'code_challenge_method' => 'plain',
                 ]);
 
+            case 'youtube':
+                // YouTube uses Google OAuth 2.0
+                return "https://accounts.google.com/o/oauth2/v2/auth?" . http_build_query([
+                    'client_id' => $clientId,
+                    'redirect_uri' => $redirectUri,
+                    'scope' => 'https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube.readonly',
+                    'response_type' => 'code',
+                    'state' => $state,
+                    'access_type' => 'offline',
+                    'prompt' => 'consent',
+                ]);
+
             default:
                 return null;
         }
@@ -120,20 +142,22 @@ class OAuthController extends Controller
             // Check for OAuth errors
             if ($request->has('error')) {
                 $errorMessage = $request->error_description ?? $request->error;
-                return redirect()
-                    ->route('admin.social-accounts.index')
-                    ->with('error', "OAuth error: {$errorMessage}");
+                // Return error callback view
+                return view('oauth-callback')->with('error', "OAuth error: {$errorMessage}");
             }
             
             // Exchange authorization code for access token
             $tokenData = $this->exchangeCodeForToken($platform, $request->code);
+
+         
             
             if (!isset($tokenData['access_token'])) {
                 throw new \Exception('Failed to obtain access token');
             }
-            
             // Get user profile
             $profileData = $this->getUserProfile($platform, $tokenData['access_token']);
+            
+            
 
             // Create or update social account
             $socialAccount = SocialAccount::updateOrCreate(
@@ -155,9 +179,8 @@ class OAuthController extends Controller
                 ]
             );
 
-            return redirect()
-                ->route('admin.social-accounts.index')
-                ->with('success', "Your {$platform} account has been connected successfully!");
+            // Return OAuth callback view that closes popup
+            return view('oauth-callback');
 
         } catch (\Exception $e) {
             \Log::error("OAuth callback error for {$platform}: " . $e->getMessage(), [
@@ -165,9 +188,8 @@ class OAuthController extends Controller
                 'request_data' => $request->all()
             ]);
             
-            return redirect()
-                ->route('admin.social-accounts.index')
-                ->with('error', 'Failed to connect your account. Please try again.');
+            // Return error callback view
+            return view('oauth-callback')->with('error', 'Failed to connect your account. Please try again.');
         }
     }
 
@@ -184,8 +206,7 @@ class OAuthController extends Controller
 
         switch ($platform) {
             case 'facebook':
-            case 'instagram':
-                $response = $client->post("https://graph.facebook.com/v18.0/oauth/access_token", [
+                $response = $client->post("https://graph.facebook.com/v21.0/oauth/access_token", [
                     'form_params' => [
                         'client_id' => $clientId,
                         'client_secret' => $clientSecret,
@@ -195,14 +216,29 @@ class OAuthController extends Controller
                 ]);
                 break;
 
+            case 'instagram':
+                $response = $client->post("https://api.instagram.com/oauth/access_token", [
+                    'form_params' => [
+                        'client_id' => $clientId,
+                        'client_secret' => $clientSecret,
+                        'grant_type' => 'authorization_code',
+                        'redirect_uri' => $redirectUri,
+                        'code' => $code,
+                    ]
+                ]);
+                break;
+
             case 'linkedin':
                 $response = $client->post("https://www.linkedin.com/oauth/v2/accessToken", [
+                    'headers' => [
+                        'Content-Type' => 'application/x-www-form-urlencoded',
+                    ],
                     'form_params' => [
                         'grant_type' => 'authorization_code',
+                        'code' => $code,
                         'client_id' => $clientId,
                         'client_secret' => $clientSecret,
                         'redirect_uri' => $redirectUri,
-                        'code' => $code,
                     ]
                 ]);
                 break;
@@ -218,6 +254,19 @@ class OAuthController extends Controller
                         'code' => $code,
                         'redirect_uri' => $redirectUri,
                         'code_verifier' => 'challenge_code',
+                    ]
+                ]);
+                break;
+
+            case 'youtube':
+                // YouTube uses Google OAuth 2.0 token endpoint
+                $response = $client->post("https://oauth2.googleapis.com/token", [
+                    'form_params' => [
+                        'client_id' => $clientId,
+                        'client_secret' => $clientSecret,
+                        'redirect_uri' => $redirectUri,
+                        'grant_type' => 'authorization_code',
+                        'code' => $code,
                     ]
                 ]);
                 break;
@@ -238,53 +287,44 @@ class OAuthController extends Controller
 
         switch ($platform) {
             case 'facebook':
-                $response = $client->get("https://graph.facebook.com/v18.0/me", [
+                $response = $client->get("https://graph.facebook.com/v21.0/me", [
                     'query' => [
-                        'fields' => 'id,name,email,picture',
+                        'fields' => 'id,name,email,picture,accounts',
                         'access_token' => $accessToken,
                     ]
                 ]);
                 break;
 
             case 'instagram':
-                $response = $client->get("https://graph.facebook.com/v18.0/me", [
+                // Use Instagram Graph API to get user profile
+                $response = $client->get("https://graph.instagram.com/me", [
                     'query' => [
-                        'fields' => 'id,username,account_type',
+                        'fields' => 'id,username,account_type,media_count,followers_count,profile_picture_url',
                         'access_token' => $accessToken,
                     ]
                 ]);
                 break;
 
             case 'linkedin':
-                // Get basic profile information
-                $profileResponse = $client->get("https://api.linkedin.com/v2/people/~:(id,firstName,lastName,profilePicture(displayImage~:playableStreams))", [
+
+                // Get basic profile information using LinkedIn v2 API
+                $response = $client->get("https://api.linkedin.com/v2/userinfo", [
                     'headers' => [
                         'Authorization' => "Bearer $accessToken",
-                    ]
+                    ],
                 ]);
                 
-                // Get email address
-                $emailResponse = $client->get("https://api.linkedin.com/v2/emailAddress?q=members&projection=(elements*(handle~))", [
-                    'headers' => [
-                        'Authorization' => "Bearer $accessToken",
-                    ]
-                ]);
-                
-                $profileData = json_decode($profileResponse->getBody()->getContents(), true);
-                $emailData = json_decode($emailResponse->getBody()->getContents(), true);
-                
-                // Format the response
-                $firstName = $profileData['firstName']['localized']['en_US'] ?? $profileData['firstName']['localized'][array_key_first($profileData['firstName']['localized'])] ?? '';
-                $lastName = $profileData['lastName']['localized']['en_US'] ?? $profileData['lastName']['localized'][array_key_first($profileData['lastName']['localized'])] ?? '';
-                
+                $profileData = json_decode($response->getBody()->getContents(), true);
+
+                // Format response based on v2 API structure
                 return [
-                    'id' => $profileData['id'],
-                    'name' => trim($firstName . ' ' . $lastName),
-                    'firstName' => $firstName,
-                    'lastName' => $lastName,
-                    'email' => $emailData['elements'][0]['handle~']['emailAddress'] ?? null,
-                    'profilePicture' => $profileData['profilePicture']['displayImage~']['elements'][0]['identifiers'][0]['identifier'] ?? null,
-                    'raw' => array_merge($profileData, ['emailData' => $emailData])
+                    'id' => $profileData['sub'] ?? '',
+                    'name' => trim(($profileData['given_name'] ?? '') . ' ' . ($profileData['family_name'] ?? '')),
+                    'firstName' => $profileData['given_name'] ?? '',
+                    'lastName' => $profileData['family_name'] ?? '',
+                    'email' => $profileData['email'] ?? null,
+                    'profilePicture' => $profileData['picture'] ?? null,
+                    'raw' => $profileData
                 ];
 
             case 'twitter':
@@ -298,10 +338,41 @@ class OAuthController extends Controller
                 ]);
                 break;
 
+            case 'youtube':
+                // Get YouTube channel information using Google API
+                $response = $client->get("https://www.googleapis.com/youtube/v3/channels", [
+                    'query' => [
+                        'part' => 'snippet,statistics',
+                        'mine' => 'true',
+                        'access_token' => $accessToken,
+                    ]
+                ]);
+                
+                $channelData = json_decode($response->getBody()->getContents(), true);
+                
+                if (isset($channelData['items'][0])) {
+                    $channel = $channelData['items'][0];
+                    return [
+                        'id' => $channel['id'],
+                        'name' => $channel['snippet']['title'],
+                        'username' => $channel['snippet']['customUrl'] ?? $channel['id'],
+                        'email' => null, // YouTube API doesn't provide email in channels endpoint
+                        'profilePicture' => $channel['snippet']['thumbnails']['default']['url'] ?? null,
+                        'subscriberCount' => $channel['statistics']['subscriberCount'] ?? 0,
+                        'videoCount' => $channel['statistics']['videoCount'] ?? 0,
+                        'raw' => $channelData
+                    ];
+                } else {
+                    throw new \Exception('Unable to fetch YouTube channel information');
+                }
+                break;
+
             default:
                 throw new \Exception("Unsupported platform for profile fetch");
         }
 
-        return json_decode($response->getBody()->getContents(), true);
+        $data = json_decode($response->getBody()->getContents(), true);
+
+        return $data;
     }
 }

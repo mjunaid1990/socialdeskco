@@ -80,7 +80,15 @@
                             <div class="flex items-center">
                                 <div class="flex-shrink-0 h-10 w-10">
                                     @if(isset($socialAccount->profile_data['picture']))
-                                        <img class="h-10 w-10 rounded-full" src="{{ $socialAccount->profile_data['picture'] }}" alt="Profile">
+                                        @if(is_string($socialAccount->profile_data['picture']))
+                                            <img class="h-10 w-10 rounded-full" src="{{ $socialAccount->profile_data['picture'] }}" alt="Profile">
+                                        @elseif(isset($socialAccount->profile_data['picture']['data']['url']))
+                                            <img class="h-10 w-10 rounded-full" src="{{ $socialAccount->profile_data['picture']['data']['url'] }}" alt="Profile">
+                                        @else
+                                            <div class="h-10 w-10 rounded-full bg-gray-300 flex items-center justify-center">
+                                                <span class="text-gray-600 font-medium">{{ substr($socialAccount->account_name, 0, 1) }}</span>
+                                            </div>
+                                        @endif
                                     @else
                                         <div class="h-10 w-10 rounded-full bg-gray-300 flex items-center justify-center">
                                             <span class="text-gray-600 font-medium">{{ substr($socialAccount->account_name, 0, 1) }}</span>

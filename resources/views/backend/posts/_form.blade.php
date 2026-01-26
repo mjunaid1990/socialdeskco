@@ -26,6 +26,27 @@
             </div>
 
             <div>
+                <label for="social_accounts" class="block text-sm font-medium text-gray-700 mb-2">
+                    Social Accounts <span class="text-red-500">*</span>
+                </label>
+                <select id="social_accounts" name="social_accounts[]" multiple 
+                        class="form-control"
+                        placeholder="Select accounts to post to...">
+                    @foreach(\App\Models\SocialAccount::where('user_id', Auth::id())->where('is_active', true)->get() as $account)
+                        <option value="{{ $account->id }}" 
+                                data-platform="{{ $account->platform }}"
+                                data-custom-properties='{"platform": "{{ $account->platform }}"}'
+                                {{ (old('social_accounts', $post->social_accounts ?? []) && in_array($account->id, old('social_accounts', $post->social_accounts ?? []))) ? 'selected' : '' }}>
+                            {{ $account->account_name }} ({{ ucfirst($account->platform) }})
+                        </option>
+                    @endforeach
+                </select>
+                
+            </div>
+        </div>
+        
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+            <div>
                 <label for="status" class="block text-sm font-medium text-gray-700 mb-2">
                     Post Status <span class="text-red-500">*</span>
                 </label>
@@ -36,6 +57,16 @@
                     <option value="published" {{ (old('status', $post->status ?? 'draft') == 'published') ? 'selected' : '' }}>✅ Published</option>
                 </select>
                 <p class="mt-1 text-sm text-gray-500">Choose when you want this post to go live</p>
+            </div>
+            
+            <div>
+                <label for="scheduled_at" class="block text-sm font-medium text-gray-700 mb-2">
+                    Schedule Date & Time
+                </label>
+                <input type="datetime-local" id="scheduled_at" name="scheduled_at" 
+                       class="w-full border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition duration-200" 
+                       value="{{ old('scheduled_at', $post->scheduled_at ? $post->scheduled_at->format('Y-m-d\TH:i') : '') }}">
+                <p class="mt-1 text-sm text-gray-500">When to publish this post (for scheduled posts)</p>
             </div>
         </div>
     </div>
@@ -370,5 +401,170 @@
                 <p class="text-xs text-gray-500 mt-1">PNG, JPG, GIF up to 10MB each</p>
             </div>
         </div>
+        
+        <!-- Existing Media Files -->
+        @if(isset($post) && $post->media_files && !empty($post->media_files))
+        <div class="mt-6">
+            <h4 class="text-sm font-medium text-gray-700 mb-3">Current Media Files</h4>
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4" id="existing-media-files">
+                @foreach($post->media_files as $index => $mediaFile)
+                <div class="relative group existing-media-item" data-index="{{ $index }}">
+                    <div class="aspect-square rounded-lg overflow-hidden border border-gray-200">
+                        @if(str_contains($mediaFile, '.jpg') || str_contains($mediaFile, '.jpeg') || str_contains($mediaFile, '.png') || str_contains($mediaFile, '.gif'))
+                            <img src="{{ $mediaFile }}" alt="Media file {{ $index + 1 }}" class="w-full h-full object-cover">
+                        @elseif(str_contains($mediaFile, '.mp4') || str_contains($mediaFile, '.mov') || str_contains($mediaFile, '.avi'))
+                            <video src="{{ $mediaFile }}" class="w-full h-full object-cover" controls></video>
+                        @else
+                            <div class="w-full h-full bg-gray-100 flex flex-col items-center justify-center p-4">
+                                <div class="text-2xl mb-2">📎</div>
+                                <p class="text-xs text-gray-600 text-center truncate">Media File</p>
+                            </div>
+                        @endif
+                        <div class="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-40 transition-all duration-200 flex items-center justify-center">
+                            <button type="button" onclick="removeExistingMedia({{ $index }})" class="opacity-0 group-hover:opacity-100 bg-red-500 text-white rounded-full p-2 hover:bg-red-600 transition-all duration-200">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                    <p class="mt-1 text-xs text-gray-600 truncate">File {{ $index + 1 }}</p>
+                    <input type="hidden" name="existing_media_files[]" value="{{ $mediaFile }}" class="existing-media-input">
+                </div>
+                @endforeach
+            </div>
+        </div>
+        @endif
     </div>
 </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('DOM loaded, initializing Choices.js...');
+    
+    // Function to initialize Choices.js
+    function initializeChoices() {
+        // Check if Choices is available (from npm)
+        if (typeof window.Choices === 'undefined') {
+            console.error('Choices.js is not loaded!');
+            
+            // Fallback: Convert to basic multi-select with styling
+            initializeFallbackMultiSelect();
+            return;
+        }
+        
+        console.log('Choices.js (npm version) is available');
+        
+        // Initialize Choices for multi-select social accounts
+        const socialAccountsSelect = document.getElementById('social_accounts');
+        
+        if (socialAccountsSelect) {
+            try {
+                console.log('Attempting to initialize Choices.js...');
+                
+                // Initialize Choices
+                const choices = new Choices(socialAccountsSelect, {
+                    removeItemButton: true,
+                    searchEnabled: true,
+                    searchPlaceholderValue: 'Search accounts...',
+                    placeholderValue: 'Select accounts to post to...',
+                    loadingText: 'Loading...',
+                    noResultsText: 'No accounts found',
+                    noChoicesText: 'No choices to choose from',
+                    itemSelectText: 'Press to select',
+                    uniqueItemText: 'Only unique values can be added'
+                });
+                
+                
+            } catch (error) {
+                console.error('Error initializing Choices.js:', error);
+                initializeFallbackMultiSelect();
+            }
+        } else {
+            console.error('Social accounts select element not found!');
+        }
+    }
+    
+    // Fallback multi-select functionality
+    function initializeFallbackMultiSelect() {
+        console.log('Initializing fallback multi-select...');
+        
+        const socialAccountsSelect = document.getElementById('social_accounts');
+        const selectedAccountsPreview = document.getElementById('selected-accounts-preview');
+        const selectedAccountsList = document.getElementById('selected-accounts-list');
+        
+        if (socialAccountsSelect) {
+            // Make it multiple and add styling
+            socialAccountsSelect.setAttribute('multiple', 'multiple');
+            socialAccountsSelect.style.height = '120px';
+            socialAccountsSelect.style.border = '2px solid #e5e7eb';
+            socialAccountsSelect.style.borderRadius = '8px';
+            socialAccountsSelect.style.padding = '8px';
+            
+            // Add change listener for preview
+            socialAccountsSelect.addEventListener('change', function() {
+                const selectedOptions = Array.from(this.selectedOptions);
+                
+                if (selectedOptions.length > 0) {
+                    selectedAccountsPreview.classList.remove('hidden');
+                    selectedAccountsList.innerHTML = '';
+                    
+                    selectedOptions.forEach(option => {
+                        const platform = option.dataset.platform || 'unknown';
+                        const name = option.dataset.name || option.text;
+                        const platformColors = {
+                            'facebook': 'bg-blue-100 text-blue-800 border-blue-200',
+                            'twitter': 'bg-sky-100 text-sky-800 border-sky-200',
+                            'linkedin': 'bg-blue-100 text-blue-800 border-blue-200',
+                            'instagram': 'bg-pink-100 text-pink-800 border-pink-200',
+                            'youtube': 'bg-red-100 text-red-800 border-red-200',
+                            'tiktok': 'bg-black text-white border-black',
+                            'pinterest': 'bg-red-100 text-red-800 border-red-200',
+                            'reddit': 'bg-orange-100 text-orange-800 border-orange-200'
+                        };
+                        const colorClass = platformColors[platform] || 'bg-gray-100 text-gray-800 border-gray-200';
+                        
+                        const badge = document.createElement('div');
+                        badge.className = `inline-flex items-center px-3 py-1 rounded-full text-xs font-medium border ${colorClass}`;
+                        badge.innerHTML = `
+                            <span class="mr-1">${name}</span>
+                            <span class="opacity-75">(${platform.toUpperCase()})</span>
+                        `;
+                        selectedAccountsList.appendChild(badge);
+                    });
+                } else {
+                    selectedAccountsPreview.classList.add('hidden');
+                }
+            });
+            
+            // Initial preview update
+            socialAccountsSelect.dispatchEvent(new Event('change'));
+            
+            console.log('Fallback multi-select initialized successfully');
+        }
+    }
+    
+    // Try to initialize immediately
+    initializeChoices();
+    
+    // If Choices is not loaded, wait a bit and try again
+    if (typeof window.Choices === 'undefined') {
+        console.log('Choices.js not loaded yet, waiting...');
+        setTimeout(initializeChoices, 1000);
+        setTimeout(initializeChoices, 2000);
+        setTimeout(initializeChoices, 3000);
+    }
+    
+    // Character counter for content
+    const contentTextarea = document.getElementById('content');
+    const charCount = document.getElementById('char-count');
+    
+    if (contentTextarea && charCount) {
+        contentTextarea.addEventListener('input', function() {
+            charCount.textContent = this.value.length + ' characters';
+        });
+        // Initialize count
+        charCount.textContent = contentTextarea.value.length + ' characters';
+    }
+});
+</script>

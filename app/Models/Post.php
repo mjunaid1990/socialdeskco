@@ -11,7 +11,7 @@ class Post extends Model
 
     protected $fillable = [
         'user_id',
-        'social_account_id',
+        'social_account_id', // Keep for backward compatibility but nullable
         'title',
         'content',
         'media_files',
@@ -38,7 +38,14 @@ class Post extends Model
         return $this->belongsTo(User::class);
     }
 
-    // Relationship with social account
+    // Many-to-many relationship with social accounts
+    public function socialAccounts()
+    {
+        return $this->belongsToMany(SocialAccount::class, 'post_social_accounts')
+            ->withTimestamps();
+    }
+
+    // Legacy single social account relationship (for backward compatibility)
     public function socialAccount()
     {
         return $this->belongsTo(SocialAccount::class);
