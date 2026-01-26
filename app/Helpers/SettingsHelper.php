@@ -574,8 +574,15 @@ class SettingsHelper
         $settingKey = $platform . '_' . $key;
         $value = self::getAdmin($settingKey, $default);
         
-        // Strip quotes from the value if they exist
+        // Handle JSON field - if it's a JSON string, decode it first
         if (is_string($value)) {
+            // Try to decode if it looks like JSON
+            $decoded = json_decode($value, true);
+            if (json_last_error() === JSON_ERROR_NONE && is_string($decoded)) {
+                $value = $decoded;
+            }
+            
+            // Strip quotes from the final string value
             $value = trim($value, '"\'');
         }
         
