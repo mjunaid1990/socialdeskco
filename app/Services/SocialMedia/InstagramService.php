@@ -12,12 +12,19 @@ class InstagramService extends BaseSocialMediaService
     public function publishPost(Post $post, SocialAccount $account)
     {
         try {
+            Log::info('InstagramService: Publishing post', [
+                'post_id' => $post->id,
+                'has_media' => !empty($post->media_files),
+                'media_count' => count($post->media_files ?? [])
+            ]);
+            
             // Instagram requires media for all posts - text-only posts are not supported
             $hasMedia = $post->media_files && !empty($post->media_files);
             if (!$hasMedia) {
                 $this->logApiError('Instagram requires media for posts', [
                     'post_id' => $post->id,
-                    'error' => 'Instagram does not support text-only posts'
+                    'error' => 'Instagram does not support text-only posts',
+                    'suggestion' => 'Please upload an image or video with your post'
                 ]);
                 $this->updatePostStatus($post, 'failed', ['error' => 'Instagram requires media for posts']);
                 return false;
@@ -25,6 +32,11 @@ class InstagramService extends BaseSocialMediaService
 
             $mediaUrl = $post->media_files[0];
             $isVideo = $this->isVideoUrl($mediaUrl);
+            
+            Log::info('InstagramService: Processing media', [
+                'media_url' => $mediaUrl,
+                'is_video' => $isVideo
+            ]);
 
             if ($isVideo) {
                 return $this->publishVideo($post, $account, $mediaUrl);
@@ -32,6 +44,11 @@ class InstagramService extends BaseSocialMediaService
                 return $this->publishPhoto($post, $account, $mediaUrl);
             }
         } catch (\Exception $e) {
+            Log::error('InstagramService: Exception in publishPost', [
+                'post_id' => $post->id,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
             return $this->handleException($post, 'Instagram', $e);
         }
     }
@@ -40,35 +57,65 @@ class InstagramService extends BaseSocialMediaService
     {
         $creationId = null;
         
-        // Step 1: Create media container for image using Facebook Graph API
-        $payload = [
-            'caption' => $post->content,
-            'image_url' => $imageUrl,
-            'media_type' => 'IMAGE',
-        ];
-        
-        $response = $this->makeApiRequest('post',
-            "https://graph.facebook.com/" . $this->getApiVersion('instagram', '22.0') . "/" . $this->getInstagramUserId($account) . "/media",
-            $payload,
-            ['Authorization' => 'Bearer ' . $this->getAccessToken($account)]
-        );
-
-        if ($response->successful()) {
-            $responseData = $response->json();
-            $creationId = $responseData['id'] ?? null;
+        try {
+            $instagramUserId = $this->getInstagramUserId($account);
+            Log::info('InstagramService: Creating photo container', [
+                'post_id' => $post->id,
+                'instagram_user_id' => $instagramUserId,
+                'image_url' => $imageUrl
+            ]);
             
-            if ($creationId) {
-                return $this->publishMediaContainer($post, $account, $creationId, 'Instagram photo');
+            // Step 1: Create media container for image using Facebook Graph API
+            $payload = [
+                'caption' => $post->content,
+                'image_url' => $imageUrl,
+                'media_type' => 'IMAGE',
+            ];
+            
+            $apiUrl = "https://graph.facebook.com/" . $this->getApiVersion('instagram', '19.0') . "/{$instagramUserId}/media";
+            
+            Log::info('InstagramService: Making API request', [
+                'url' => $apiUrl,
+                'payload' => $payload
+            ]);
+            
+            $response = $this->makeApiRequest('post', $apiUrl, $payload, [
+                'Authorization' => 'Bearer ' . $this->getAccessToken($account)
+            ]);
+
+            Log::info('InstagramService: API response', [
+                'status' => $response->status(),
+                'successful' => $response->successful(),
+                'response_body' => $response->json()
+            ]);
+
+            if ($response->successful()) {
+                $responseData = $response->json();
+                $creationId = $responseData['id'] ?? null;
+                
+                if ($creationId) {
+                    Log::info('InstagramService: Photo container created', [
+                        'creation_id' => $creationId
+                    ]);
+                    return $this->publishMediaContainer($post, $account, $creationId, 'Instagram photo');
+                } else {
+                    $this->logApiError('Instagram photo creation ID not returned', [
+                        'response' => $responseData,
+                        'post_id' => $post->id
+                    ]);
+                    $this->updatePostStatus($post, 'failed', $responseData);
+                    return false;
+                }
             } else {
-                $this->logApiError('Instagram photo creation ID not returned', [
-                    'response' => $responseData,
-                    'post_id' => $post->id
-                ]);
-                $this->updatePostStatus($post, 'failed', $responseData);
-                return false;
+                return $this->handleApiError($post, 'Instagram create photo', $response, ['creation_id' => $creationId, 'instagram_user_id' => $instagramUserId], $account);
             }
-        } else {
-            return $this->handleApiError($post, 'Instagram create photo', $response, ['creation_id' => $creationId], $account);
+        } catch (\Exception $e) {
+            Log::error('InstagramService: Exception in publishPhoto', [
+                'post_id' => $post->id,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            return $this->handleException($post, 'Instagram photo', $e);
         }
     }
 
@@ -76,105 +123,212 @@ class InstagramService extends BaseSocialMediaService
     {
         $creationId = null;
         
-        // Step 1: Create media container for video using Facebook Graph API
-        $payload = [
-            'caption' => $post->content,
-            'video_url' => $videoUrl,
-            'media_type' => 'VIDEO',
-        ];
-        
-        $response = $this->makeApiRequest('post',
-            "https://graph.facebook.com/" . $this->getApiVersion('instagram', '22.0') . "/" . $this->getInstagramUserId($account) . "/media",
-            $payload,
-            ['Authorization' => 'Bearer ' . $this->getAccessToken($account)]
-        );
-
-        if ($response->successful()) {
-            $responseData = $response->json();
-            $creationId = $responseData['id'] ?? null;
+        try {
+            $instagramUserId = $this->getInstagramUserId($account);
+            Log::info('InstagramService: Creating video container', [
+                'post_id' => $post->id,
+                'instagram_user_id' => $instagramUserId,
+                'video_url' => $videoUrl
+            ]);
             
-            if ($creationId) {
-                // For videos, we need to wait for processing to complete
-                return $this->waitForVideoProcessingAndPublish($post, $account, $creationId);
+            // Step 1: Create media container for video using Facebook Graph API
+            $payload = [
+                'caption' => $post->content,
+                'video_url' => $videoUrl,
+                'media_type' => 'VIDEO',
+            ];
+            
+            $apiUrl = "https://graph.facebook.com/" . $this->getApiVersion('instagram', '19.0') . "/{$instagramUserId}/media";
+            
+            Log::info('InstagramService: Making video API request', [
+                'url' => $apiUrl,
+                'payload' => $payload
+            ]);
+            
+            $response = $this->makeApiRequest('post', $apiUrl, $payload, [
+                'Authorization' => 'Bearer ' . $this->getAccessToken($account)
+            ]);
+
+            Log::info('InstagramService: Video API response', [
+                'status' => $response->status(),
+                'successful' => $response->successful(),
+                'response_body' => $response->json()
+            ]);
+
+            if ($response->successful()) {
+                $responseData = $response->json();
+                $creationId = $responseData['id'] ?? null;
+                
+                if ($creationId) {
+                    Log::info('InstagramService: Video container created', [
+                        'creation_id' => $creationId
+                    ]);
+                    // For videos, we need to wait for processing to complete
+                    return $this->waitForVideoProcessingAndPublish($post, $account, $creationId);
+                } else {
+                    $this->logApiError('Instagram video creation ID not returned', [
+                        'response' => $responseData,
+                        'post_id' => $post->id
+                    ]);
+                    $this->updatePostStatus($post, 'failed', $responseData);
+                    return false;
+                }
             } else {
-                $this->logApiError('Instagram video creation ID not returned', [
-                    'response' => $responseData,
-                    'post_id' => $post->id
-                ]);
-                $this->updatePostStatus($post, 'failed', $responseData);
-                return false;
+                return $this->handleApiError($post, 'Instagram create video', $response, ['creation_id' => $creationId, 'instagram_user_id' => $instagramUserId], $account);
             }
-        } else {
-            return $this->handleApiError($post, 'Instagram create video', $response, ['creation_id' => $creationId], $account);
+        } catch (\Exception $e) {
+            Log::error('InstagramService: Exception in publishVideo', [
+                'post_id' => $post->id,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            return $this->handleException($post, 'Instagram video', $e);
         }
     }
 
     private function publishMediaContainer(Post $post, SocialAccount $account, string $creationId, string $mediaType)
     {
-        // Step 2: Publish the media container using Facebook Graph API
-        $publishResponse = $this->makeApiRequest('post',
-            "https://graph.facebook.com/" . $this->getApiVersion('instagram', '22.0') . "/" . $this->getInstagramUserId($account) . "/media_publish",
-            ['creation_id' => $creationId],
-            ['Authorization' => 'Bearer ' . $this->getAccessToken($account)]
-        );
-
-        if ($publishResponse->successful()) {
-            $publishData = $publishResponse->json();
-            $mediaId = $publishData['id'] ?? null;
-            
-            // Store media ID for deletion and other platform data
-            $platformData = array_merge([
+        try {
+            $instagramUserId = $this->getInstagramUserId($account);
+            Log::info('InstagramService: Publishing media container', [
+                'post_id' => $post->id,
                 'creation_id' => $creationId,
-                'media_id' => $mediaId,
-            ], $publishData);
+                'instagram_user_id' => $instagramUserId,
+                'media_type' => $mediaType
+            ]);
             
-            $this->updatePostStatus($post, 'published', $platformData);
-            return $publishData;
-        } else {
-            return $this->handleApiError($post, 'Instagram publish ' . $mediaType, $publishResponse, ['creation_id' => $creationId], $account);
+            // Step 2: Publish the media container using Facebook Graph API
+            $publishUrl = "https://graph.facebook.com/" . $this->getApiVersion('instagram', '19.0') . "/{$instagramUserId}/media_publish";
+            $publishPayload = ['creation_id' => $creationId];
+            
+            Log::info('InstagramService: Making publish request', [
+                'url' => $publishUrl,
+                'payload' => $publishPayload
+            ]);
+            
+            $publishResponse = $this->makeApiRequest('post', $publishUrl, $publishPayload, [
+                'Authorization' => 'Bearer ' . $this->getAccessToken($account)]
+            );
+
+            Log::info('InstagramService: Publish response', [
+                'status' => $publishResponse->status(),
+                'successful' => $publishResponse->successful(),
+                'response_body' => $publishResponse->json()
+            ]);
+
+            if ($publishResponse->successful()) {
+                $publishData = $publishResponse->json();
+                $mediaId = $publishData['id'] ?? null;
+                
+                Log::info('InstagramService: Post published successfully', [
+                    'post_id' => $post->id,
+                    'media_id' => $mediaId,
+                    'media_type' => $mediaType
+                ]);
+                
+                // Store media ID for deletion and other platform data
+                $platformData = array_merge([
+                    'creation_id' => $creationId,
+                    'media_id' => $mediaId,
+                ], $publishData);
+                
+                $this->updatePostStatus($post, 'published', $platformData);
+                return $publishData;
+            } else {
+                return $this->handleApiError($post, 'Instagram publish ' . $mediaType, $publishResponse, ['creation_id' => $creationId, 'instagram_user_id' => $instagramUserId], $account);
+            }
+        } catch (\Exception $e) {
+            Log::error('InstagramService: Exception in publishMediaContainer', [
+                'post_id' => $post->id,
+                'creation_id' => $creationId,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            return $this->handleException($post, 'Instagram publish', $e);
         }
     }
 
     private function waitForVideoProcessingAndPublish(Post $post, SocialAccount $account, string $creationId, int $maxAttempts = 10)
     {
-        // Instagram videos need time to process before publishing
-        for ($attempt = 1; $attempt <= $maxAttempts; $attempt++) {
-            // Check container status using Facebook Graph API
-            $statusResponse = $this->makeApiRequest('get',
-                "https://graph.facebook.com/" . $this->getApiVersion('instagram', '22.0') . "/{$creationId}",
-                ['fields' => 'status_code'],
-                ['Authorization' => 'Bearer ' . $this->getAccessToken($account)]
-            );
+        try {
+            Log::info('InstagramService: Waiting for video processing', [
+                'post_id' => $post->id,
+                'creation_id' => $creationId,
+                'max_attempts' => $maxAttempts
+            ]);
+            
+            // Instagram videos need time to process before publishing
+            for ($attempt = 1; $attempt <= $maxAttempts; $attempt++) {
+                Log::info('InstagramService: Checking video status', [
+                    'attempt' => $attempt,
+                    'creation_id' => $creationId
+                ]);
+                
+                // Check container status using Facebook Graph API
+                $statusUrl = "https://graph.facebook.com/" . $this->getApiVersion('instagram', '19.0') . "/{$creationId}";
+                $statusResponse = $this->makeApiRequest('get', $statusUrl, ['fields' => 'status_code'], [
+                    'Authorization' => 'Bearer ' . $this->getAccessToken($account)
+                ]);
 
-            if ($statusResponse->successful()) {
-                $statusData = $statusResponse->json();
-                $statusCode = $statusData['status_code'] ?? null;
+                Log::info('InstagramService: Video status response', [
+                    'attempt' => $attempt,
+                    'status' => $statusResponse->status(),
+                    'response_body' => $statusResponse->json()
+                ]);
 
-                if ($statusCode === 'FINISHED') {
-                    return $this->publishMediaContainer($post, $account, $creationId, 'Instagram video');
-                } elseif ($statusCode === 'ERROR' || $statusCode === 'FAILED') {
-                    $this->logApiError('Instagram video processing failed', [
-                        'creation_id' => $creationId,
-                        'status_data' => $statusData,
-                        'post_id' => $post->id
+                if ($statusResponse->successful()) {
+                    $statusData = $statusResponse->json();
+                    $statusCode = $statusData['status_code'] ?? null;
+
+                    Log::info('InstagramService: Video processing status', [
+                        'attempt' => $attempt,
+                        'status_code' => $statusCode,
+                        'creation_id' => $creationId
                     ]);
-                    $this->updatePostStatus($post, 'failed', $statusData);
-                    return false;
+
+                    if ($statusCode === 'FINISHED') {
+                        Log::info('InstagramService: Video processing finished, publishing', [
+                            'creation_id' => $creationId,
+                            'attempts_taken' => $attempt
+                        ]);
+                        return $this->publishMediaContainer($post, $account, $creationId, 'Instagram video');
+                    } elseif ($statusCode === 'ERROR' || $statusCode === 'FAILED') {
+                        $this->logApiError('Instagram video processing failed', [
+                            'creation_id' => $creationId,
+                            'status_data' => $statusData,
+                            'post_id' => $post->id,
+                            'attempts' => $attempt
+                        ]);
+                        $this->updatePostStatus($post, 'failed', $statusData);
+                        return false;
+                    }
                 }
+
+                // Wait before next attempt (exponential backoff)
+                $waitTime = min($attempt * 2, 10); // Max 10 seconds
+                Log::info('InstagramService: Waiting before next check', [
+                    'attempt' => $attempt,
+                    'wait_time' => $waitTime
+                ]);
+                sleep($waitTime);
             }
 
-            // Wait before next attempt (exponential backoff)
-            $waitTime = min($attempt * 2, 10); // Max 10 seconds
-            sleep($waitTime);
+            $this->logApiError('Instagram video processing timeout', [
+                'creation_id' => $creationId,
+                'attempts' => $maxAttempts,
+                'post_id' => $post->id
+            ]);
+            $this->updatePostStatus($post, 'failed', ['error' => 'Video processing timeout']);
+            return false;
+        } catch (\Exception $e) {
+            Log::error('InstagramService: Exception in waitForVideoProcessingAndPublish', [
+                'post_id' => $post->id,
+                'creation_id' => $creationId,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            return $this->handleException($post, 'Instagram video processing', $e);
         }
-
-        $this->logApiError('Instagram video processing timeout', [
-            'creation_id' => $creationId,
-            'attempts' => $maxAttempts,
-            'post_id' => $post->id
-        ]);
-        $this->updatePostStatus($post, 'failed', ['error' => 'Video processing timeout']);
-        return false;
     }
 
     private function isVideoUrl(string $url): bool
@@ -235,20 +389,30 @@ class InstagramService extends BaseSocialMediaService
         // Get Instagram Business ID from profile data (from Facebook Graph API)
         $profileData = $account->profile_data ?? [];
         
+        Log::info('InstagramService: Getting Instagram User ID', [
+            'account_id' => $account->id,
+            'profile_data' => $profileData,
+            'platform_data' => $account->platform_specific_data ?? [],
+            'provider_id' => $account->provider_id
+        ]);
+        
         // The correct Instagram Business ID should be stored in profile_data['id']
         // This comes from Facebook Graph API: /{page-id}?fields=instagram_business_account
         if (isset($profileData['id'])) {
+            Log::info('InstagramService: Found ID in profile_data', ['id' => $profileData['id']]);
             return $profileData['id'];
         }
         
         // Check platform specific data as fallback
         $platformData = $account->platform_specific_data ?? [];
         if (isset($platformData['instagram_business_id'])) {
+            Log::info('InstagramService: Found ID in platform_specific_data', ['id' => $platformData['instagram_business_id']]);
             return $platformData['instagram_business_id'];
         }
         
         // Fallback to provider_id if it contains the correct IG Business ID
         if ($account->provider_id && strlen($account->provider_id) > 15) {
+            Log::info('InstagramService: Using provider_id as fallback', ['provider_id' => $account->provider_id]);
             return $account->provider_id;
         }
         
