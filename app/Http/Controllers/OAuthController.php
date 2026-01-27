@@ -73,7 +73,7 @@ class OAuthController extends Controller
                 ]);
 
             case 'instagram':
-                $scope = 'instagram_basic,instagram_content_publish,pages_show_list,pages_read_engagement';
+                $scope = 'instagram_basic,instagram_content_publish,instagram_manage_insights,pages_show_list,pages_read_engagement,business_management';
                 return "https://www.facebook.com/v22.0/dialog/oauth?" . http_build_query([
                     'client_id' => $clientId,
                     'redirect_uri' => $redirectUri,
@@ -226,6 +226,7 @@ class OAuthController extends Controller
                         'client_secret' => $clientSecret,
                         'redirect_uri' => $redirectUri,
                         'code' => $code,
+                        'grant_type' => 'authorization_code',
                     ]
                 ]);
                 

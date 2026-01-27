@@ -38,6 +38,8 @@ class InstagramService extends BaseSocialMediaService
 
     private function publishPhoto(Post $post, SocialAccount $account, string $imageUrl)
     {
+        $creationId = null;
+        
         // Step 1: Create media container for image using Facebook Graph API
         $payload = [
             'caption' => $post->content,
@@ -72,6 +74,8 @@ class InstagramService extends BaseSocialMediaService
 
     private function publishVideo(Post $post, SocialAccount $account, string $videoUrl)
     {
+        $creationId = null;
+        
         // Step 1: Create media container for video using Facebook Graph API
         $payload = [
             'caption' => $post->content,
