@@ -11,12 +11,21 @@ class InstagramService extends BaseSocialMediaService
 {
     public function publishPost(Post $post, SocialAccount $account)
     {
+        Log::info('InstagramService: NEW VERSION - Starting publishPost', [
+            'post_id' => $post->id,
+            'account_id' => $account->id,
+            'timestamp' => now()->toISOString()
+        ]);
+        
         try {
             Log::info('InstagramService: Publishing post', [
                 'post_id' => $post->id,
                 'has_media' => !empty($post->media_files),
                 'media_count' => count($post->media_files ?? [])
             ]);
+            
+            // Debug access token and permissions first
+            $this->debugAccessToken($account);
             
             // First validate the Instagram account connection
             $this->validateInstagramConnection($account);
