@@ -34,7 +34,16 @@ class SocialMediaServiceFactory
         }
 
         $serviceClass = self::$services[$platform];
-        return new $serviceClass();
+        $service = new $serviceClass();
+        
+        // Debug log to see what service is being created
+        \Illuminate\Support\Facades\Log::info("SocialMediaServiceFactory: Created service", [
+            'platform' => $platform,
+            'service_class' => $serviceClass,
+            'service_instance' => get_class($service)
+        ]);
+        
+        return $service;
     }
 
     public static function createForAccount(SocialAccount $account): SocialMediaPlatformInterface

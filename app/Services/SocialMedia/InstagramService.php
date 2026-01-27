@@ -9,6 +9,14 @@ use Illuminate\Support\Facades\Log;
 
 class InstagramService extends BaseSocialMediaService
 {
+    public function __construct()
+    {
+        Log::info('InstagramService: CONSTRUCTOR CALLED - NEW VERSION', [
+            'timestamp' => now()->toISOString(),
+            'class' => __CLASS__
+        ]);
+    }
+    
     public function publishPost(Post $post, SocialAccount $account)
     {
         Log::info('InstagramService: NEW VERSION - Starting publishPost', [
