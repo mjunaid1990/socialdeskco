@@ -437,17 +437,46 @@ class InstagramService extends BaseSocialMediaService
             'provider_id' => $account->provider_id
         ]);
         
-        // The correct Instagram Business ID should be stored in profile_data['id']
-        // This comes from Facebook Graph API: /{page-id}?fields=instagram_business_account
+        // First try to get the Instagram Business Account ID from the Facebook Page
+        if (isset($profileData['facebook_page_id'])) {
+            $facebookPageId = $profileData['facebook_page_id'];
+            Log::info('InstagramService: Found Facebook Page ID, fetching Instagram Business Account', [
+                'facebook_page_id' => $facebookPageId
+            ]);
+            
+            try {
+                // Use Facebook Graph API to get the Instagram Business Account ID
+                $instagramBusinessId = $this->getInstagramBusinessAccountFromFacebookPage($account, $facebookPageId);
+                if ($instagramBusinessId && $this->isValidInstagramBusinessId($instagramBusinessId)) {
+                    Log::info('InstagramService: Successfully retrieved Instagram Business Account ID', [
+                        'instagram_business_id' => $instagramBusinessId
+                    ]);
+                    return $instagramBusinessId;
+                }
+            } catch (\Exception $e) {
+                Log::warning('InstagramService: Failed to get Instagram Business Account from Facebook Page', [
+                    'facebook_page_id' => $facebookPageId,
+                    'error' => $e->getMessage()
+                ]);
+            }
+        }
+        
+        // Fallback to checking if the stored ID is actually an Instagram Business Account ID
         if (isset($profileData['id'])) {
             $instagramId = $profileData['id'];
-            Log::info('InstagramService: Found ID in profile_data', ['id' => $instagramId]);
+            Log::info('InstagramService: Checking if stored ID is Instagram Business Account', ['id' => $instagramId]);
             
             // Validate that this looks like an Instagram Business Account ID
             if ($this->isValidInstagramBusinessId($instagramId)) {
-                return $instagramId;
+                // Test if this ID actually works with Instagram API
+                if ($this->testInstagramAccountId($account, $instagramId)) {
+                    Log::info('InstagramService: Stored ID is valid Instagram Business Account', ['id' => $instagramId]);
+                    return $instagramId;
+                } else {
+                    Log::warning('InstagramService: Stored ID failed Instagram API test', ['id' => $instagramId]);
+                }
             } else {
-                Log::warning('InstagramService: Invalid Instagram Business ID format in profile_data', [
+                Log::warning('InstagramService: Stored ID is not valid Instagram Business Account format', [
                     'id' => $instagramId,
                     'length' => strlen($instagramId)
                 ]);
@@ -460,32 +489,12 @@ class InstagramService extends BaseSocialMediaService
             $instagramId = $platformData['instagram_business_id'];
             Log::info('InstagramService: Found ID in platform_specific_data', ['id' => $instagramId]);
             
-            if ($this->isValidInstagramBusinessId($instagramId)) {
+            if ($this->isValidInstagramBusinessId($instagramId) && $this->testInstagramAccountId($account, $instagramId)) {
                 return $instagramId;
-            } else {
-                Log::warning('InstagramService: Invalid Instagram Business ID format in platform_specific_data', [
-                    'id' => $instagramId,
-                    'length' => strlen($instagramId)
-                ]);
             }
         }
         
-        // Fallback to provider_id if it contains the correct IG Business ID
-        if ($account->provider_id && strlen($account->provider_id) > 15) {
-            $instagramId = $account->provider_id;
-            Log::info('InstagramService: Using provider_id as fallback', ['provider_id' => $instagramId]);
-            
-            if ($this->isValidInstagramBusinessId($instagramId)) {
-                return $instagramId;
-            } else {
-                Log::warning('InstagramService: Invalid Instagram Business ID format in provider_id', [
-                    'id' => $instagramId,
-                    'length' => strlen($instagramId)
-                ]);
-            }
-        }
-        
-        // Log error and throw exception - this should never happen with proper setup
+        // Log error and throw exception
         Log::error('Instagram Business ID not found or invalid - account may not be properly connected', [
             'account_id' => $account->id,
             'profile_data' => $profileData,
@@ -493,7 +502,46 @@ class InstagramService extends BaseSocialMediaService
             'provider_id' => $account->provider_id,
         ]);
         
-        throw new \Exception('Instagram Business ID not found or invalid. Please reconnect your Instagram account and ensure it\'s a Business/Creator account.');
+        throw new \Exception('Instagram Business Account not found or not properly connected. Please ensure your Instagram account is a Business/Creator account and connected to a Facebook Page.');
+    }
+    
+    private function getInstagramBusinessAccountFromFacebookPage(SocialAccount $account, string $facebookPageId): ?string
+    {
+        $url = "https://graph.facebook.com/" . $this->getApiVersion('instagram', '19.0') . "/{$facebookPageId}";
+        $response = $this->makeApiRequest('get', $url, ['fields' => 'instagram_business_account'], [
+            'Authorization' => 'Bearer ' . $this->getAccessToken($account)
+        ]);
+        
+        Log::info('InstagramService: Facebook Page Instagram Business Account response', [
+            'facebook_page_id' => $facebookPageId,
+            'status' => $response->status(),
+            'response_body' => $response->json()
+        ]);
+        
+        if ($response->successful()) {
+            $data = $response->json();
+            if (isset($data['instagram_business_account']['id'])) {
+                return $data['instagram_business_account']['id'];
+            }
+        }
+        
+        return null;
+    }
+    
+    private function testInstagramAccountId(SocialAccount $account, string $instagramId): bool
+    {
+        $testUrl = "https://graph.facebook.com/" . $this->getApiVersion('instagram', '19.0') . "/{$instagramId}";
+        $response = $this->makeApiRequest('get', $testUrl, ['fields' => 'id,username'], [
+            'Authorization' => 'Bearer ' . $this->getAccessToken($account)
+        ]);
+        
+        Log::info('InstagramService: Testing Instagram Account ID', [
+            'instagram_id' => $instagramId,
+            'status' => $response->status(),
+            'successful' => $response->successful()
+        ]);
+        
+        return $response->successful();
     }
     
     private function isValidInstagramBusinessId(string $id): bool
