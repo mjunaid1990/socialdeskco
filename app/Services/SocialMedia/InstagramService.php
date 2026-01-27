@@ -507,13 +507,17 @@ class InstagramService extends BaseSocialMediaService
     
     private function getInstagramBusinessAccountFromFacebookPage(SocialAccount $account, string $facebookPageId): ?string
     {
+        // First, let's debug the access token and permissions
+        $this->debugAccessToken($account);
+        
         $url = "https://graph.facebook.com/" . $this->getApiVersion('instagram', '19.0') . "/{$facebookPageId}";
-        $response = $this->makeApiRequest('get', $url, ['fields' => 'instagram_business_account'], [
+        $response = $this->makeApiRequest('get', $url, ['fields' => 'instagram_business_account,name,username'], [
             'Authorization' => 'Bearer ' . $this->getAccessToken($account)
         ]);
         
         Log::info('InstagramService: Facebook Page Instagram Business Account response', [
             'facebook_page_id' => $facebookPageId,
+            'url' => $url,
             'status' => $response->status(),
             'response_body' => $response->json()
         ]);
@@ -522,10 +526,47 @@ class InstagramService extends BaseSocialMediaService
             $data = $response->json();
             if (isset($data['instagram_business_account']['id'])) {
                 return $data['instagram_business_account']['id'];
+            } else {
+                Log::warning('InstagramService: No instagram_business_account field in response', [
+                    'response_data' => $data
+                ]);
             }
+        } else {
+            Log::error('InstagramService: Failed to get Facebook Page data', [
+                'facebook_page_id' => $facebookPageId,
+                'error' => $response->json()
+            ]);
         }
         
         return null;
+    }
+    
+    private function debugAccessToken(SocialAccount $account): void
+    {
+        $token = $this->getAccessToken($account);
+        $debugUrl = "https://graph.facebook.com/" . $this->getApiVersion('instagram', '19.0') . "/debug_token";
+        $response = Http::asForm()->post($debugUrl, [
+            'input_token' => $token,
+            'access_token' => $this->getClientId('facebook') . '|' . $this->getClientSecret('facebook')
+        ]);
+        
+        Log::info('InstagramService: Access token debug info', [
+            'token_length' => strlen($token),
+            'token_prefix' => substr($token, 0, 20) . '...',
+            'debug_response' => $response->json()
+        ]);
+        
+        // Also try to get user info with the token
+        $meUrl = "https://graph.facebook.com/" . $this->getApiVersion('instagram', '19.0') . "/me";
+        $meResponse = $this->makeApiRequest('get', $meUrl, ['fields' => 'id,name,permissions'], [
+            'Authorization' => 'Bearer ' . $token
+        ]);
+        
+        Log::info('InstagramService: User info with token', [
+            'me_url' => $meUrl,
+            'status' => $meResponse->status(),
+            'response' => $meResponse->json()
+        ]);
     }
     
     private function testInstagramAccountId(SocialAccount $account, string $instagramId): bool
