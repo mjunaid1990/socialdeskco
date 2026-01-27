@@ -18,6 +18,9 @@ class InstagramService extends BaseSocialMediaService
                 'media_count' => count($post->media_files ?? [])
             ]);
             
+            // First validate the Instagram account connection
+            $this->validateInstagramConnection($account);
+            
             // Instagram requires media for all posts - text-only posts are not supported
             $hasMedia = $post->media_files && !empty($post->media_files);
             if (!$hasMedia) {
@@ -50,6 +53,44 @@ class InstagramService extends BaseSocialMediaService
                 'trace' => $e->getTraceAsString()
             ]);
             return $this->handleException($post, 'Instagram', $e);
+        }
+    }
+    
+    private function validateInstagramConnection(SocialAccount $account): void
+    {
+        try {
+            $instagramUserId = $this->getInstagramUserId($account);
+            
+            Log::info('InstagramService: Validating connection', [
+                'account_id' => $account->id,
+                'instagram_user_id' => $instagramUserId
+            ]);
+            
+            // Test the connection by making a simple API call
+            $testUrl = "https://graph.facebook.com/" . $this->getApiVersion('instagram', '19.0') . "/{$instagramUserId}";
+            $response = $this->makeApiRequest('get', $testUrl, ['fields' => 'id,username'], [
+                'Authorization' => 'Bearer ' . $this->getAccessToken($account)
+            ]);
+            
+            Log::info('InstagramService: Connection test response', [
+                'status' => $response->status(),
+                'successful' => $response->successful(),
+                'response_body' => $response->json()
+            ]);
+            
+            if (!$response->successful()) {
+                $errorData = $response->json();
+                throw new \Exception('Instagram connection failed: ' . ($errorData['error']['message'] ?? 'Unknown error'));
+            }
+            
+            Log::info('InstagramService: Connection validated successfully');
+            
+        } catch (\Exception $e) {
+            Log::error('InstagramService: Connection validation failed', [
+                'account_id' => $account->id,
+                'error' => $e->getMessage()
+            ]);
+            throw new \Exception('Instagram account connection is invalid. Please reconnect your Instagram account: ' . $e->getMessage());
         }
     }
 
@@ -399,32 +440,67 @@ class InstagramService extends BaseSocialMediaService
         // The correct Instagram Business ID should be stored in profile_data['id']
         // This comes from Facebook Graph API: /{page-id}?fields=instagram_business_account
         if (isset($profileData['id'])) {
-            Log::info('InstagramService: Found ID in profile_data', ['id' => $profileData['id']]);
-            return $profileData['id'];
+            $instagramId = $profileData['id'];
+            Log::info('InstagramService: Found ID in profile_data', ['id' => $instagramId]);
+            
+            // Validate that this looks like an Instagram Business Account ID
+            if ($this->isValidInstagramBusinessId($instagramId)) {
+                return $instagramId;
+            } else {
+                Log::warning('InstagramService: Invalid Instagram Business ID format in profile_data', [
+                    'id' => $instagramId,
+                    'length' => strlen($instagramId)
+                ]);
+            }
         }
         
         // Check platform specific data as fallback
         $platformData = $account->platform_specific_data ?? [];
         if (isset($platformData['instagram_business_id'])) {
-            Log::info('InstagramService: Found ID in platform_specific_data', ['id' => $platformData['instagram_business_id']]);
-            return $platformData['instagram_business_id'];
+            $instagramId = $platformData['instagram_business_id'];
+            Log::info('InstagramService: Found ID in platform_specific_data', ['id' => $instagramId]);
+            
+            if ($this->isValidInstagramBusinessId($instagramId)) {
+                return $instagramId;
+            } else {
+                Log::warning('InstagramService: Invalid Instagram Business ID format in platform_specific_data', [
+                    'id' => $instagramId,
+                    'length' => strlen($instagramId)
+                ]);
+            }
         }
         
         // Fallback to provider_id if it contains the correct IG Business ID
         if ($account->provider_id && strlen($account->provider_id) > 15) {
-            Log::info('InstagramService: Using provider_id as fallback', ['provider_id' => $account->provider_id]);
-            return $account->provider_id;
+            $instagramId = $account->provider_id;
+            Log::info('InstagramService: Using provider_id as fallback', ['provider_id' => $instagramId]);
+            
+            if ($this->isValidInstagramBusinessId($instagramId)) {
+                return $instagramId;
+            } else {
+                Log::warning('InstagramService: Invalid Instagram Business ID format in provider_id', [
+                    'id' => $instagramId,
+                    'length' => strlen($instagramId)
+                ]);
+            }
         }
         
         // Log error and throw exception - this should never happen with proper setup
-        Log::error('Instagram Business ID not found - account may not be properly connected', [
+        Log::error('Instagram Business ID not found or invalid - account may not be properly connected', [
             'account_id' => $account->id,
             'profile_data' => $profileData,
             'platform_data' => $platformData,
             'provider_id' => $account->provider_id,
         ]);
         
-        throw new \Exception('Instagram Business ID not found. Please reconnect your Instagram account.');
+        throw new \Exception('Instagram Business ID not found or invalid. Please reconnect your Instagram account and ensure it\'s a Business/Creator account.');
+    }
+    
+    private function isValidInstagramBusinessId(string $id): bool
+    {
+        // Instagram Business Account IDs are typically numeric and around 15-17 digits
+        // They should not contain any special characters or letters
+        return is_numeric($id) && strlen($id) >= 15 && strlen($id) <= 20;
     }
 
     public function refreshToken(SocialAccount $account): bool
