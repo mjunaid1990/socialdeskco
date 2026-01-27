@@ -136,17 +136,17 @@ abstract class BaseSocialMediaService implements SocialMediaPlatformInterface
 
     protected function getApiVersion(string $platform, string $defaultVersion): string
     {
-        return SettingsHelper::get("{$platform}_api_version", $defaultVersion);
+        return SettingsHelper::getAdmin("{$platform}_api_version", $defaultVersion);
     }
 
     protected function getClientId(string $platform): string
     {
-        return SettingsHelper::get("{$platform}_client_id");
+        return SettingsHelper::getAdmin("{$platform}_client_id");
     }
 
     protected function getClientSecret(string $platform): string
     {
-        return SettingsHelper::get("{$platform}_client_secret");
+        return SettingsHelper::getAdmin("{$platform}_client_secret");
     }
 
     protected function getAccessToken(SocialAccount $account): string
