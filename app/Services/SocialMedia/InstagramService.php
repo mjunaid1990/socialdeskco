@@ -568,8 +568,8 @@ class InstagramService extends BaseSocialMediaService
         ]);
         
         // Try to debug token only if we have the Facebook app credentials
-        $facebookClientId = $this->getClientId('facebook');
-        $facebookClientSecret = $this->getClientSecret('facebook');
+        $facebookClientId = $this->getClientId('instagram');
+        $facebookClientSecret = $this->getClientSecret('instagram');
         
         if ($facebookClientId && $facebookClientSecret) {
             $debugUrl = "https://graph.facebook.com/" . $this->getApiVersion('instagram', '19.0') . "/debug_token";
