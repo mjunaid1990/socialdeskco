@@ -460,9 +460,9 @@ class SettingsHelper
      */
     public static function get($key, $default = null)
     {
-        if (!Auth::check()) {
-            return $default;
-        }
+        // if (!Auth::check()) {
+        //     return $default;
+        // }
 
         $setting = Setting::where('user_id', Auth::id())
             ->where('setting_key', $key)
