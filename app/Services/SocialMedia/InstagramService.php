@@ -561,17 +561,32 @@ class InstagramService extends BaseSocialMediaService
     private function debugAccessToken(SocialAccount $account): void
     {
         $token = $this->getAccessToken($account);
-        $debugUrl = "https://graph.facebook.com/" . $this->getApiVersion('instagram', '19.0') . "/debug_token";
-        $response = Http::asForm()->post($debugUrl, [
-            'input_token' => $token,
-            'access_token' => $this->getClientId('facebook') . '|' . $this->getClientSecret('facebook')
-        ]);
         
         Log::info('InstagramService: Access token debug info', [
             'token_length' => strlen($token),
-            'token_prefix' => substr($token, 0, 20) . '...',
-            'debug_response' => $response->json()
+            'token_prefix' => substr($token, 0, 20) . '...'
         ]);
+        
+        // Try to debug token only if we have the Facebook app credentials
+        $facebookClientId = $this->getClientId('facebook');
+        $facebookClientSecret = $this->getClientSecret('facebook');
+        
+        if ($facebookClientId && $facebookClientSecret) {
+            $debugUrl = "https://graph.facebook.com/" . $this->getApiVersion('instagram', '19.0') . "/debug_token";
+            $response = Http::asForm()->post($debugUrl, [
+                'input_token' => $token,
+                'access_token' => $facebookClientId . '|' . $facebookClientSecret
+            ]);
+            
+            Log::info('InstagramService: Access token debug response', [
+                'debug_response' => $response->json()
+            ]);
+        } else {
+            Log::warning('InstagramService: Facebook app credentials not found, skipping token debug', [
+                'facebook_client_id' => $facebookClientId,
+                'has_client_secret' => !empty($facebookClientSecret)
+            ]);
+        }
         
         // Also try to get user info with the token
         $meUrl = "https://graph.facebook.com/" . $this->getApiVersion('instagram', '19.0') . "/me";
