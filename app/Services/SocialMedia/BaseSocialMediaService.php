@@ -12,9 +12,13 @@ abstract class BaseSocialMediaService implements SocialMediaPlatformInterface
 {
     protected function updatePostStatus(Post $post, string $status, array $data = []): void
     {
+        // Merge with existing platform data instead of overwriting
+        $existingData = $post->platform_specific_data ?? [];
+        $mergedData = array_merge($existingData, $data);
+        
         $post->update([
             'status' => $status,
-            'platform_specific_data' => $data,
+            'platform_specific_data' => $mergedData,
             'published_at' => $status === 'published' ? now() : $post->published_at,
         ]);
     }
@@ -141,12 +145,60 @@ abstract class BaseSocialMediaService implements SocialMediaPlatformInterface
 
     protected function getClientId(string $platform): string
     {
-        return SettingsHelper::getAdmin("{$platform}_client_id");
+        $clientId = SettingsHelper::getAdmin("{$platform}_client_id");
+        
+        // Handle JSON encoded values or null
+        if ($clientId === null) {
+            throw new \Exception("{$platform} client ID not found in settings");
+        }
+        
+        // If it's a JSON string, decode it first
+        if (is_string($clientId) && (str_starts_with($clientId, '"') || str_starts_with($clientId, '{'))) {
+            $decoded = json_decode($clientId, true);
+            if (json_last_error() === JSON_ERROR_NONE && is_string($decoded)) {
+                $clientId = $decoded;
+            }
+        }
+        
+        // Remove quotes if the value is wrapped in them
+        if (is_string($clientId)) {
+            $clientId = trim($clientId, '"\'');
+        }
+        
+        if (empty($clientId)) {
+            throw new \Exception("{$platform} client ID is empty");
+        }
+        
+        return $clientId;
     }
 
     protected function getClientSecret(string $platform): string
     {
-        return SettingsHelper::getAdmin("{$platform}_client_secret");
+        $clientSecret = SettingsHelper::getAdmin("{$platform}_client_secret");
+        
+        // Handle JSON encoded values or null
+        if ($clientSecret === null) {
+            throw new \Exception("{$platform} client secret not found in settings");
+        }
+        
+        // If it's a JSON string, decode it first
+        if (is_string($clientSecret) && (str_starts_with($clientSecret, '"') || str_starts_with($clientSecret, '{'))) {
+            $decoded = json_decode($clientSecret, true);
+            if (json_last_error() === JSON_ERROR_NONE && is_string($decoded)) {
+                $clientSecret = $decoded;
+            }
+        }
+        
+        // Remove quotes if the value is wrapped in them
+        if (is_string($clientSecret)) {
+            $clientSecret = trim($clientSecret, '"\'');
+        }
+        
+        if (empty($clientSecret)) {
+            throw new \Exception("{$platform} client secret is empty");
+        }
+        
+        return $clientSecret;
     }
 
     protected function getAccessToken(SocialAccount $account): string

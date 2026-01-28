@@ -460,9 +460,9 @@ class SettingsHelper
      */
     public static function get($key, $default = null)
     {
-        // if (!Auth::check()) {
-        //     return $default;
-        // }
+        if (!Auth::check()) {
+            return $default;
+        }
 
         $setting = Setting::where('user_id', Auth::id())
             ->where('setting_key', $key)
@@ -480,9 +480,9 @@ class SettingsHelper
      */
     public static function getAdmin($key, $default = null)
     {
-        if (!Auth::check()) {
-            return $default;
-        }
+        // if (!Auth::check()) {
+        //     return $default;
+        // }
 
         $setting = Setting::where('user_id', 1)
             ->where('setting_key', $key)
