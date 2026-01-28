@@ -73,14 +73,15 @@ class OAuthController extends Controller
                 ]);
 
             case 'instagram':
-                // Instagram Business Login with proper scopes
-                $scope = 'instagram_business_basic,instagram_business_manage_messages,instagram_business_manage_comments,instagram_business_content_publish';
-                return "https://www.instagram.com/oauth/authorize?" . http_build_query([
+                $scope = 'instagram_basic,instagram_content_publish,instagram_manage_insights,pages_show_list,pages_read_engagement,business_management';
+                return "https://www.facebook.com/v22.0/dialog/oauth?" . http_build_query([
                     'client_id' => $clientId,
                     'redirect_uri' => $redirectUri,
                     'scope' => $scope,
                     'response_type' => 'code',
                     'state' => $state,
+                    'login_type' => 'instagram',
+                    'display' => 'page'
                 ]);
 
             case 'linkedin':
@@ -220,8 +221,8 @@ class OAuthController extends Controller
                 break;
 
             case 'instagram':
-                // Instagram token exchange endpoint
-                $response = $client->post("https://api.instagram.com/oauth/access_token", [
+                // Instagram uses Facebook OAuth token endpoint
+                $response = $client->post("https://graph.facebook.com/v22.0/oauth/access_token", [
                     'form_params' => [
                         'client_id' => $clientId,
                         'client_secret' => $clientSecret,
@@ -233,13 +234,16 @@ class OAuthController extends Controller
                 
                 $tokenData = json_decode($response->getBody()->getContents(), true);
                 
-                // Exchange short-lived token for long-lived token
+                // For Instagram, we should exchange for long-lived token
+                // Note: With Facebook Login, tokens are already long-lived (60 days)
+                // But we can extend them further
                 try {
-                    $longLivedResponse = $client->get("https://graph.instagram.com/access_token", [
+                    $longLivedResponse = $client->get("https://graph.facebook.com/v22.0/oauth/access_token", [
                         'query' => [
-                            'grant_type' => 'ig_exchange_token',
+                            'grant_type' => 'fb_exchange_token',
+                            'client_id' => $clientId,
                             'client_secret' => $clientSecret,
-                            'access_token' => $tokenData['access_token'],
+                            'fb_exchange_token' => $tokenData['access_token'],
                         ]
                     ]);
                     
@@ -309,58 +313,6 @@ class OAuthController extends Controller
     }
 
     /**
-     * Refresh Instagram access token
-     */
-    public function refreshInstagramToken(Request $request)
-    {
-        try {
-            $accountId = $request->input('account_id');
-            $socialAccount = SocialAccount::findOrFail($accountId);
-            
-            if ($socialAccount->platform !== 'instagram') {
-                return response()->json(['error' => 'This endpoint is for Instagram accounts only'], 400);
-            }
-            
-            $client = new Client();
-            
-            // Refresh the access token
-            $response = $client->get("https://graph.instagram.com/refresh_access_token", [
-                'query' => [
-                    'grant_type' => 'ig_refresh_token',
-                    'access_token' => $socialAccount->access_token,
-                ]
-            ]);
-            
-            $refreshData = json_decode($response->getBody()->getContents(), true);
-            
-            if (isset($refreshData['access_token'])) {
-                // Update the social account with new token
-                $socialAccount->update([
-                    'access_token' => $refreshData['access_token'],
-                    'token_expires_at' => isset($refreshData['expires_in']) 
-                        ? now()->addSeconds($refreshData['expires_in']) 
-                        : now()->addDays(60), // Default 60 days
-                    'last_sync_at' => now(),
-                ]);
-                
-                return response()->json([
-                    'success' => true,
-                    'message' => 'Instagram token refreshed successfully',
-                    'expires_at' => $socialAccount->token_expires_at,
-                ]);
-            } else {
-                throw new \Exception('Failed to refresh token');
-            }
-            
-        } catch (\Exception $e) {
-            Log::error('Failed to refresh Instagram token: ' . $e->getMessage());
-            return response()->json([
-                'error' => 'Failed to refresh Instagram token: ' . $e->getMessage()
-            ], 500);
-        }
-    }
-
-    /**
      * Get user profile from platform
      */
     private function getUserProfile($platform, $accessToken)
@@ -395,16 +347,16 @@ class OAuthController extends Controller
                         if (isset($page['instagram_business_account'])) {
                             $igAccount = $page['instagram_business_account'];
                             
-                                return [
-                                    'id' => $igAccount['id'], // Instagram Business Account ID
-                                    'username' => $igAccount['username'] ?? '',
+                            return [
+                                'id' => $igAccount['id'], // Instagram Business Account ID
+                                'username' => $igAccount['username'] ?? '',
                                 'name' => $igAccount['name'] ?? $igAccount['username'] ?? 'Instagram Account',
-                                    'profile_picture_url' => $igAccount['profile_picture_url'] ?? null,
+                                'profile_picture_url' => $igAccount['profile_picture_url'] ?? null,
                                 'followers_count' => $igAccount['followers_count'] ?? 0,
                                 'media_count' => $igAccount['media_count'] ?? 0,
-                                    'facebook_page_id' => $page['id'],
-                                    'facebook_page_name' => $page['name'],
-                                ];
+                                'facebook_page_id' => $page['id'],
+                                'facebook_page_name' => $page['name'],
+                            ];
                         }
                     }
                     
