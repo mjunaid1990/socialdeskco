@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Backend;
 use App\Http\Controllers\Controller;
 use App\Models\Post;
 use App\Models\SocialAccount;
+use App\Services\AiService;
 use App\Jobs\PublishPostJob;
 use App\Jobs\DeletePostJob;
 use Illuminate\Http\Request;
