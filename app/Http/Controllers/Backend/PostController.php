@@ -6,11 +6,11 @@ use App\Http\Controllers\Controller;
 use App\Models\Post;
 use App\Models\SocialAccount;
 use App\Jobs\PublishPostJob;
-use App\Services\AiService;
+use App\Jobs\DeletePostJob;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
-use App\Services\SocialMediaService;
+use Illuminate\Support\Facades\Storage;
 
 class PostController extends Controller
 {
@@ -327,43 +327,16 @@ class PostController extends Controller
         if ($post->status === 'published') {
             $socialAccounts = $post->socialAccounts;
             foreach ($socialAccounts as $account) {
-                $this->deleteFromSocialMedia($post, $account);
+                // Dispatch delete job for each platform
+                DeletePostJob::dispatch($post, $account);
+                Log::info("DeletePostJob dispatched for post {$post->id} from {$account->platform}");
             }
         }
         
         // Delete from local database
         $post->delete();
 
-        return redirect()->route('admin.posts.index')->with('success', 'Post deleted successfully.');
-    }
-    
-    /**
-     * Delete post from social media platforms
-     */
-    private function deleteFromSocialMedia(Post $post, SocialAccount $account)
-    {
-        try {
-            if (!$account || !$account->is_active) {
-                Log::warning("Cannot delete from {$account->platform}: Account not found or inactive");
-                return false;
-            }
-            
-            Log::info("Deleting post {$post->id} from {$account->platform}");
-            
-            $socialMediaService = new SocialMediaService();
-            $result = $socialMediaService->deletePost($post, $account);
-            
-            if ($result) {
-                Log::info("Successfully deleted post {$post->id} from {$account->platform}");
-            } else {
-                Log::warning("Failed to delete post {$post->id} from {$account->platform}");
-            }
-        } catch (\Exception $e) {
-            Log::error("Error deleting post {$post->id} from social media: " . $e->getMessage(), [
-                'post_id' => $post->id,
-                'platform' => $account->platform ?? 'unknown'
-            ]);
-        }
+        return redirect()->route('admin.posts.index')->with('success', 'Post deleted successfully. Social media deletion is processing in the background.');
     }
 
     /**

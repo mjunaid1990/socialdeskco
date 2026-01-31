@@ -101,9 +101,22 @@ class XService extends BaseSocialMediaService
     public function deletePost(Post $post, SocialAccount $account): bool
     {
         try {
+            // Debug: Log the full platform_specific_data structure
+            Log::info('X deletePost: Debug platform data', [
+                'post_id' => $post->id,
+                'full_platform_data' => $post->platform_specific_data,
+                'x_platform_data' => $post->platform_specific_data['x'] ?? 'not found'
+            ]);
+            
             // Get tweet ID from platform specific data
             $platformData = $post->platform_specific_data['x'] ?? [];
             $tweetId = $platformData['data']['id'] ?? null;
+            
+            Log::info('X deletePost: Extracted tweet ID', [
+                'post_id' => $post->id,
+                'platform_data' => $platformData,
+                'tweet_id' => $tweetId
+            ]);
             
             if (!$tweetId) {
                 Log::error('Cannot delete X post: No tweet ID', [
@@ -114,10 +127,23 @@ class XService extends BaseSocialMediaService
                 return false;
             }
 
+            Log::info('X deletePost: Attempting to delete tweet', [
+                'post_id' => $post->id,
+                'tweet_id' => $tweetId,
+                'account_id' => $account->id
+            ]);
+
             // Delete the tweet using X API v2
             $response = Http::withHeaders([
                 'Authorization' => 'Bearer ' . $account->access_token,
             ])->delete("https://api.x.com/2/tweets/{$tweetId}");
+            
+            Log::info('X deletePost: API response', [
+                'post_id' => $post->id,
+                'tweet_id' => $tweetId,
+                'status_code' => $response->status(),
+                'response_body' => $response->json()
+            ]);
             
             if ($response->successful()) {
                 $responseData = $response->json();
@@ -132,7 +158,7 @@ class XService extends BaseSocialMediaService
                     ]);
                     return true;
                 } else {
-                    Log::error('X post deletion failed', [
+                    Log::error('X post deletion failed - not deleted flag', [
                         'post_id' => $post->id,
                         'tweet_id' => $tweetId,
                         'response_body' => $responseData
