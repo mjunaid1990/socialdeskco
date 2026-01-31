@@ -264,7 +264,7 @@ class XService extends BaseSocialMediaService
         return str_starts_with($mediaType, 'video/') ? 'tweet_video' : 'tweet_image';
     }
 
-    private function updatePostStatus(Post $post, string $status, array $platformData = []): void
+    protected function updatePostStatus(Post $post, string $status, array $platformData = []): void
     {
         $currentPlatformData = $post->platform_specific_data ?? [];
         $post->platform_specific_data = array_merge($currentPlatformData, $platformData);
