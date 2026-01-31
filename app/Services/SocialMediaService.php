@@ -50,6 +50,10 @@ class SocialMediaService
                     // Platform service returned true for success
                     $successCount++;
                     Log::info('SocialMediaService: Successfully published to ' . $account->platform . ' (ID: ' . $account->id . ')');
+                } elseif (is_array($result) && isset($result['data']['id'])) {
+                    // Platform service returned response data with ID (like X API response)
+                    $successCount++;
+                    Log::info('SocialMediaService: Successfully published to ' . $account->platform . ' (ID: ' . $account->id . ') with response ID: ' . $result['data']['id']);
                 } else {
                     // Platform service returned false for failure
                     $failureCount++;
@@ -484,31 +488,6 @@ class SocialMediaService
             $post->update([
                 'status' => 'failed',
                 'platform_specific_data' => ['error' => $e->getMessage()]
-            ]);
-            
-            return false;
-        }
-    }
-
-    private function publishToX(Post $post, SocialAccount $account)
-    {
-        try {
-            // Use the XService for publishing
-            $xService = new \App\Services\SocialMedia\XService();
-            return $xService->publishPost($post, $account);
-        } catch (\Exception $e) {
-            Log::error('X post publishing failed', [
-                'error' => $e->getMessage(),
-                'post_id' => $post->id,
-                'account_id' => $account->id,
-                'trace' => $e->getTraceAsString()
-            ]);
-            
-            $post->update([
-                'status' => 'failed',
-                'platform_specific_data' => array_merge($post->platform_specific_data ?? [], [
-                    'x' => ['error' => $e->getMessage()]
-                ])
             ]);
             
             return false;
