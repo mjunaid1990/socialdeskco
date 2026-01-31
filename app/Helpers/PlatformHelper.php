@@ -12,7 +12,7 @@ class PlatformHelper
         return [
             'facebook' => 'Facebook',
             'instagram' => 'Instagram',
-            'twitter' => 'Twitter',
+            'x' => 'X',
             'linkedin' => 'LinkedIn',
             'whatsapp' => 'WhatsApp',
             'tiktok' => 'TikTok',
@@ -53,7 +53,7 @@ class PlatformHelper
         return [
             'facebook' => 'Facebook',
             'instagram' => 'Instagram',
-            'twitter' => 'Twitter',
+            'x' => 'X',
             'linkedin' => 'LinkedIn',
             'whatsapp' => 'WhatsApp',
         ];
@@ -67,7 +67,7 @@ class PlatformHelper
         return [
             'facebook' => 'Facebook Messenger',
             'instagram' => 'Instagram Direct',
-            'twitter' => 'Twitter DMs',
+            'x' => 'X DMs',
             'linkedin' => 'LinkedIn Messages',
             'whatsapp' => 'WhatsApp',
             'telegram' => 'Telegram',
@@ -83,7 +83,7 @@ class PlatformHelper
         return [
             'facebook' => 'Facebook',
             'instagram' => 'Instagram',
-            'twitter' => 'Twitter',
+            'x' => 'X',
             'linkedin' => 'LinkedIn',
             'tiktok' => 'TikTok',
             'pinterest' => 'Pinterest',

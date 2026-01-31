@@ -690,7 +690,7 @@ class SocialMediaService
         }
     }
 
-    private function refreshXTwitterToken(SocialAccount $account)
+    private function refreshXToken(SocialAccount $account)
     {
         if (!$account->refresh_token) {
             return false;
@@ -700,7 +700,7 @@ class SocialMediaService
         $response = Http::asForm()->withBasicAuth(
             SettingsHelper::get('x_client_id'),
             SettingsHelper::get('x_client_secret')
-        )->post('https://api.twitter.com/2/oauth2/token', [
+        )->post('https://api.x.com/2/oauth2/token', [
             'grant_type' => 'refresh_token',
             'refresh_token' => $account->refresh_token,
         ]);
@@ -734,10 +734,8 @@ class SocialMediaService
                     return $this->refreshFacebookToken($account);
                 case 'linkedin':
                     return $this->refreshLinkedInToken($account);
-                case 'twitter':
-                    return $this->refreshTwitterToken($account);
                 case 'x':
-                    return $this->refreshXTwitterToken($account);
+                    return $this->refreshXToken($account);
                 default:
                     return false;
             }
@@ -750,40 +748,6 @@ class SocialMediaService
             
             return false;
         }
-    }
-
-    private function refreshFacebookToken(SocialAccount $account)
-    {
-        // Facebook/Instagram long-lived token refresh implementation
-        if (!$account->refresh_token) {
-            return false;
-        }
-
-        $response = Http::asForm()->post('https://graph.facebook.com/oauth/access_token', [
-            'grant_type' => 'fb_exchange_token',
-            'client_id' => SettingsHelper::get('facebook_client_id'),
-            'client_secret' => SettingsHelper::get('facebook_client_secret'),
-            'fb_exchange_token' => $account->refresh_token,
-        ]);
-
-        if ($response->successful()) {
-            $data = $response->json();
-            $account->update([
-                'access_token' => $data['access_token'],
-                'expires_in' => $data['expires_in'],
-                'token_expires_at' => now()->addSeconds($data['expires_in']),
-            ]);
-            
-            return true;
-        } else {
-            Log::error('Facebook token refresh failed', [
-                'status_code' => $response->status(),
-                'response' => $response->json(),
-                'account_id' => $account->id,
-            ]);
-        }
-        
-        return false;
     }
 
     private function refreshLinkedInToken(SocialAccount $account)
@@ -815,37 +779,9 @@ class SocialMediaService
                 'response' => $response->json(),
                 'account_id' => $account->id,
             ]);
-        }
-        
-        return false;
-    }
-
-    private function refreshTwitterToken(SocialAccount $account)
-    {
-        if (!$account->refresh_token) {
+            
             return false;
         }
-
-        // Twitter token refresh implementation
-        $response = Http::asForm()->withBasicAuth(
-            SettingsHelper::get('twitter_client_id'),
-            SettingsHelper::get('twitter_client_secret')
-        )->post('https://api.twitter.com/oauth2/token', [
-            'grant_type' => 'refresh_token',
-            'refresh_token' => $account->refresh_token,
-        ]);
-
-        if ($response->successful()) {
-            $data = $response->json();
-            $account->update([
-                'access_token' => $data['access_token'],
-                'token_expires_at' => now()->addSeconds($data['expires_in'] ?? 3600),
-            ]);
-            
-            return true;
-        }
-        
-        return false;
     }
 
     private function publishToPinterest(Post $post, SocialAccount $account)

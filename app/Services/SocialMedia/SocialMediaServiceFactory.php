@@ -10,7 +10,6 @@ class SocialMediaServiceFactory
     private static array $services = [
         'facebook' => FacebookService::class,
         'instagram' => InstagramService::class,
-        'twitter' => TwitterService::class,
         'x' => XService::class,
         'linkedin' => LinkedInService::class,
         'whatsapp' => WhatsAppService::class,

@@ -93,16 +93,16 @@ class OAuthController extends Controller
                     'state' => $state,
                 ]);
 
-            case 'twitter':
-                // Twitter OAuth 1.0a flow is more complex
-                // This is a simplified version
-                return "https://twitter.com/i/oauth2/authorize?" . http_build_query([
+            case 'x':
+                // X OAuth 2.0 with PKCE - Updated endpoints
+                $scope = 'tweet.read tweet.write users.read offline.access';
+                return "https://x.com/i/oauth2/authorize?" . http_build_query([
                     'response_type' => 'code',
                     'client_id' => $clientId,
                     'redirect_uri' => $redirectUri,
-                    'scope' => 'tweet.read tweet.write users.read offline.access',
+                    'scope' => $scope,
                     'state' => $state,
-                    'code_challenge' => 'challenge_code',
+                    'code_challenge' => 'challenge_code', // In production, use proper PKCE
                     'code_challenge_method' => 'plain',
                 ]);
 
@@ -277,8 +277,9 @@ class OAuthController extends Controller
                 ]);
                 break;
 
-            case 'twitter':
-                $response = $client->post("https://api.twitter.com/2/oauth2/token", [
+            case 'x':
+                // X OAuth 2.0 token exchange - Updated endpoint
+                $response = $client->post("https://api.x.com/2/oauth2/token", [
                     'headers' => [
                         'Content-Type' => 'application/x-www-form-urlencoded',
                         'Authorization' => 'Basic ' . base64_encode("$clientId:$clientSecret"),
@@ -287,7 +288,7 @@ class OAuthController extends Controller
                         'grant_type' => 'authorization_code',
                         'code' => $code,
                         'redirect_uri' => $redirectUri,
-                        'code_verifier' => 'challenge_code',
+                        'code_verifier' => 'challenge_code', // Must match code_challenge
                     ]
                 ]);
                 break;
@@ -390,15 +391,30 @@ class OAuthController extends Controller
                     'raw' => $profileData
                 ];
 
-            case 'twitter':
-                $response = $client->get("https://api.twitter.com/2/users/me", [
+            case 'x':
+                // X v2 API user profile - Updated endpoint
+                $response = $client->get("https://api.x.com/2/users/me", [
                     'headers' => [
                         'Authorization' => "Bearer $accessToken",
                     ],
                     'query' => [
-                        'user.fields' => 'id,name,username,profile_image_url',
+                        'user.fields' => 'id,name,username,profile_image_url,public_metrics',
                     ]
                 ]);
+                
+                $profileData = json_decode($response->getBody()->getContents(), true);
+
+                // Format response based on X API v2 structure
+                return [
+                    'id' => $profileData['data']['id'] ?? '',
+                    'name' => $profileData['data']['name'] ?? '',
+                    'username' => $profileData['data']['username'] ?? '',
+                    'profile_image_url' => $profileData['data']['profile_image_url'] ?? null,
+                    'followers_count' => $profileData['data']['public_metrics']['followers_count'] ?? 0,
+                    'following_count' => $profileData['data']['public_metrics']['following_count'] ?? 0,
+                    'tweet_count' => $profileData['data']['public_metrics']['tweet_count'] ?? 0,
+                    'raw' => $profileData
+                ];
                 break;
 
             case 'youtube':

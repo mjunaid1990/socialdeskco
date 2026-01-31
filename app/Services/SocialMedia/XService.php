@@ -20,7 +20,7 @@ class XService extends BaseSocialMediaService
             }
             
             $response = $this->makeApiRequest('post',
-                "https://api.twitter.com/2/tweets",
+                "https://api.x.com/2/tweets",
                 $payload,
                 ['Authorization' => 'Bearer ' . $this->getAccessToken($account)]
             );
@@ -44,7 +44,7 @@ class XService extends BaseSocialMediaService
         $response = Http::asForm()->withBasicAuth(
             $this->getClientId('x'),
             $this->getClientSecret('x')
-        )->post('https://api.twitter.com/2/oauth2/token', [
+        )->post('https://api.x.com/2/oauth2/token', [
             'grant_type' => 'refresh_token',
             'refresh_token' => $this->getRefreshToken($account),
         ]);
