@@ -41,4 +41,10 @@ return [
         'base_uri' => env('OPENAI_BASE_URI', 'https://api.openai.com/v1'),
     ],
 
+    'x' => [
+        'client_id' => env('X_CLIENT_ID'),
+        'client_secret' => env('X_CLIENT_SECRET'),
+        'redirect_uri' => env('X_REDIRECT_URI'),
+    ],
+
 ];

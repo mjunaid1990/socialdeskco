@@ -508,7 +508,7 @@ class SocialMediaService
             $response = Http::withHeaders([
                 'Authorization' => 'Bearer ' . $account->access_token,
                 'Content-Type' => 'application/json',
-            ])->post("https://api.twitter.com/2/tweets", $payload);
+            ])->post("https://api.x.com/2/tweets", $payload);
 
             if ($response->successful()) {
                 $responseData = $response->json();
