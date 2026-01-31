@@ -493,55 +493,22 @@ class SocialMediaService
     private function publishToX(Post $post, SocialAccount $account)
     {
         try {
-            // X API v2 implementation for posting tweets
-            $payload = [
-                'text' => $post->content,
-            ];
-            
-            // Include media if available
-            if ($post->media_files && !empty($post->media_files)) {
-                // X API doesn't directly support media upload in the same request
-                // We would need to upload media first, then attach it to the tweet
-                // This would require a separate media upload implementation
-            }
-            
-            $response = Http::withHeaders([
-                'Authorization' => 'Bearer ' . $account->access_token,
-                'Content-Type' => 'application/json',
-            ])->post("https://api.x.com/2/tweets", $payload);
-
-            if ($response->successful()) {
-                $responseData = $response->json();
-                $post->update([
-                    'platform_specific_data' => $responseData,
-                    'status' => 'published',
-                    'published_at' => now(),
-                ]);
-                
-                return $responseData;
-            } else {
-                Log::error('X post failed', [
-                    'response' => $response->json(),
-                    'status_code' => $response->status(),
-                    'post_id' => $post->id
-                ]);
-                
-                $post->update([
-                    'status' => 'failed',
-                    'platform_specific_data' => $response->json()
-                ]);
-                
-                return false;
-            }
+            // Use the XService for publishing
+            $xService = new \App\Services\SocialMedia\XService();
+            return $xService->publishPost($post, $account);
         } catch (\Exception $e) {
-            Log::error('X API Error', [
+            Log::error('X post publishing failed', [
                 'error' => $e->getMessage(),
-                'post_id' => $post->id
+                'post_id' => $post->id,
+                'account_id' => $account->id,
+                'trace' => $e->getTraceAsString()
             ]);
             
             $post->update([
                 'status' => 'failed',
-                'platform_specific_data' => ['error' => $e->getMessage()]
+                'platform_specific_data' => array_merge($post->platform_specific_data ?? [], [
+                    'x' => ['error' => $e->getMessage()]
+                ])
             ]);
             
             return false;
