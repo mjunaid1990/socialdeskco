@@ -120,7 +120,7 @@ class OAuthController extends Controller
 
             case 'tiktok':
                 // TikTok OAuth 2.0
-                $scope = 'user.info.basic,video.list';
+                $scope = 'user.info.basic,video.publish,video.list';
                 return "https://www.tiktok.com/v2/auth/authorize/?" . http_build_query([
                     'client_key' => $clientId,
                     'redirect_uri' => $redirectUri,
@@ -319,7 +319,7 @@ class OAuthController extends Controller
 
             case 'tiktok':
                 // TikTok OAuth 2.0 token exchange
-                $response = $client->post("https://open.tiktokapis.com/v2/oauth/token/", [
+                $response = $client->post("https://open.tiktokapis.com/v2/auth/token/", [
                     'headers' => [
                         'Content-Type' => 'application/x-www-form-urlencoded',
                     ],
@@ -331,6 +331,7 @@ class OAuthController extends Controller
                         'redirect_uri' => $redirectUri,
                     ]
                 ]);
+
                 break;
 
             default:
