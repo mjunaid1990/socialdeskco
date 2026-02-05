@@ -118,6 +118,17 @@ class OAuthController extends Controller
                     'prompt' => 'consent',
                 ]);
 
+            case 'tiktok':
+                // TikTok OAuth 2.0
+                $scope = 'user.info.basic,video.list';
+                return "https://www.tiktok.com/v2/oauth/authorize/?" . http_build_query([
+                    'client_id' => $clientId,
+                    'redirect_uri' => $redirectUri,
+                    'scope' => $scope,
+                    'response_type' => 'code',
+                    'state' => $state,
+                ]);
+
             default:
                 return null;
         }
@@ -306,6 +317,22 @@ class OAuthController extends Controller
                 ]);
                 break;
 
+            case 'tiktok':
+                // TikTok OAuth 2.0 token exchange
+                $response = $client->post("https://open.tiktokapis.com/v2/oauth/token/", [
+                    'headers' => [
+                        'Content-Type' => 'application/x-www-form-urlencoded',
+                    ],
+                    'form_params' => [
+                        'client_key' => $clientId,
+                        'client_secret' => $clientSecret,
+                        'code' => $code,
+                        'grant_type' => 'authorization_code',
+                        'redirect_uri' => $redirectUri,
+                    ]
+                ]);
+                break;
+
             default:
                 throw new \Exception("Unsupported platform for token exchange");
         }
@@ -444,6 +471,31 @@ class OAuthController extends Controller
                 } else {
                     throw new \Exception('Unable to fetch YouTube channel information');
                 }
+                break;
+
+            case 'tiktok':
+                // Get TikTok user profile information
+                $response = $client->get("https://open.tiktokapis.com/v2/user/info/?fields=id,username,display_name,bio,avatar,likes_count,followers_count,following_count,video_count", [
+                    'headers' => [
+                        'Authorization' => "Bearer $accessToken",
+                    ],
+                ]);
+                
+                $profileData = json_decode($response->getBody()->getContents(), true);
+
+                // Format response based on TikTok API structure
+                return [
+                    'id' => $profileData['data']['user']['id'] ?? '',
+                    'username' => $profileData['data']['user']['username'] ?? '',
+                    'name' => $profileData['data']['user']['display_name'] ?? $profileData['data']['user']['username'] ?? 'TikTok User',
+                    'bio' => $profileData['data']['user']['bio'] ?? '',
+                    'profilePicture' => $profileData['data']['user']['avatar'] ?? null,
+                    'likes_count' => $profileData['data']['user']['likes_count'] ?? 0,
+                    'followers_count' => $profileData['data']['user']['followers_count'] ?? 0,
+                    'following_count' => $profileData['data']['user']['following_count'] ?? 0,
+                    'video_count' => $profileData['data']['user']['video_count'] ?? 0,
+                    'raw' => $profileData
+                ];
                 break;
 
             default:

@@ -14,17 +14,8 @@ class PlatformHelper
             'instagram' => 'Instagram',
             'x' => 'X',
             'linkedin' => 'LinkedIn',
-            'whatsapp' => 'WhatsApp',
             'tiktok' => 'TikTok',
             'youtube' => 'YouTube',
-            'pinterest' => 'Pinterest',
-            'reddit' => 'Reddit',
-            'telegram' => 'Telegram',
-            'discord' => 'Discord',
-            'tumblr' => 'Tumblr',
-            'flickr' => 'Flickr',
-            'vimeo' => 'Vimeo',
-            'twitch' => 'Twitch',
         ];
     }
 
