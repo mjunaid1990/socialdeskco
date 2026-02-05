@@ -121,7 +121,7 @@ class OAuthController extends Controller
             case 'tiktok':
                 // TikTok OAuth 2.0
                 $scope = 'user.info.basic,video.list';
-                return "https://www.tiktok.com/v2/oauth/authorize/?" . http_build_query([
+                return "https://www.tiktok.com/v2/auth/authorize/?" . http_build_query([
                     'client_id' => $clientId,
                     'redirect_uri' => $redirectUri,
                     'scope' => $scope,
