@@ -373,11 +373,6 @@ class OAuthController extends Controller
 
             case 'tiktok':
                 // TikTok OAuth 2.0 token exchange - Using v2 endpoint
-                Log::info("Exchanging TikTok OAuth code for token", [
-                    'client_key' => substr($clientId, 0, 10) . '...', // Log partial for security
-                    'redirect_uri' => $redirectUri,
-                    'code_present' => !empty($code)
-                ]);
 
                 $response = $client->post("https://open.tiktokapis.com/v2/oauth/token/", [
                     'headers' => [
@@ -394,17 +389,6 @@ class OAuthController extends Controller
                 ]);
 
                 $tokenData = json_decode($response->getBody()->getContents(), true);
-
-                // Log token response structure
-                Log::info("TikTok token exchange response", [
-                    'status_code' => $response->getStatusCode(),
-                    'has_access_token' => isset($tokenData['access_token']),
-                    'has_refresh_token' => isset($tokenData['refresh_token']),
-                    'has_open_id' => isset($tokenData['open_id']),
-                    'expires_in' => $tokenData['expires_in'] ?? 'not_provided',
-                    'scope' => $tokenData['scope'] ?? 'not_provided',
-                    'error' => $tokenData['error'] ?? 'none'
-                ]);
 
                 // Check for TikTok API errors
                 if (isset($tokenData['error'])) {
@@ -565,11 +549,7 @@ class OAuthController extends Controller
                 // TikTok v2 API - Get user profile information
                 // Use open_id from token if available, otherwise rely on access token
                 $openId = $tokenData['tiktok_open_id'] ?? $tokenData['open_id'] ?? null;
-                
-                Log::info("Fetching TikTok user profile", [
-                    'open_id' => $openId ? 'present' : 'not_present',
-                    'access_token_present' => !empty($accessToken)
-                ]);
+
 
                 // Request basic profile fields available with user.info.basic scope
                 // According to TikTok docs, basic scope provides: open_id, union_id, avatar_url, display_name
@@ -603,13 +583,6 @@ class OAuthController extends Controller
 
                 $responseBody = $response->getBody()->getContents();
                 $profileData = json_decode($responseBody, true);
-
-                Log::info("TikTok profile response", [
-                    'status_code' => $response->getStatusCode(),
-                    'has_data' => isset($profileData['data']),
-                    'has_error' => isset($profileData['error']),
-                    'error_code' => $profileData['error']['code'] ?? 'none'
-                ]);
 
                 // Check for API errors
                 if (isset($profileData['error']) && $profileData['error']['code'] !== 'ok') {
