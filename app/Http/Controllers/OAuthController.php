@@ -361,7 +361,7 @@ class OAuthController extends Controller
                     'code_present' => !empty($code)
                 ]);
 
-                $response = $client->post("https://open.tiktokapis.com/v2/auth/token/", [
+                $response = $client->post("https://open.tiktokapis.com/v2/oauth/token/", [
                     'headers' => [
                         'Content-Type' => 'application/x-www-form-urlencoded',
                     ],
