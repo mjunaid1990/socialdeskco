@@ -144,7 +144,8 @@ function multiStepForm() {
                 'instagram': 'pink-600', 
                 'x': 'black',
                 'linkedin': 'blue-700',
-                'youtube': 'red-600'
+                'youtube': 'red-600',
+                'tiktok': 'black'
             };
             return colors[platformName] || 'gray-600';
         },
