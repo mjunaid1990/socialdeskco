@@ -120,7 +120,7 @@ class OAuthController extends Controller
 
             case 'tiktok':
                 // TikTok OAuth 2.0
-                $scope = 'user.info.basic,video.list';
+                $scope = 'user.info.basic,video.publish,video.list';
                 return "https://www.tiktok.com/v2/auth/authorize/?" . http_build_query([
                     'client_key' => $clientId,
                     'redirect_uri' => $redirectUri,
@@ -164,7 +164,6 @@ class OAuthController extends Controller
             Log::info("OAuth callback received for platform: {$platform}", [
                 'code' => !empty($request->code) ? 'present' : 'missing',
                 'state' => $request->state ?? 'missing',
-                'scopes_authorized' => $request->scopes ?? 'not_provided',
                 'request_params' => $request->all()
             ]);
 
@@ -540,7 +539,7 @@ class OAuthController extends Controller
                     'access_token_present' => !empty($accessToken)
                 ]);
 
-                $response = $client->get("https://open.tiktokapis.com/v2/user/info/?fields=open_id,union_id,avatar_url,display_name", [
+                $response = $client->get("https://open.tiktokapis.com/v2/user/info/?fields=id,username,display_name,bio,avatar,likes_count,followers_count,following_count,video_count", [
                     'headers' => [
                         'Authorization' => "Bearer $accessToken",
                     ],
@@ -553,29 +552,11 @@ class OAuthController extends Controller
                 ]);
 
                 if (!$response->successful()) {
-                    $errorBody = $response->getBody()->getContents();
                     Log::error("TikTok profile fetch failed", [
                         'status_code' => $response->getStatusCode(),
-                        'response_body' => $errorBody
+                        'response_body' => $response->getBody()->getContents()
                     ]);
-                    
-                    // Handle scope authorization errors gracefully
-                    if ($response->getStatusCode() === 401) {
-                        $errorData = json_decode($errorBody, true);
-                        if (isset($errorData['error']['code']) && $errorData['error']['code'] === 'scope_not_authorized') {
-                            Log::warning("User didn't authorize required scopes, creating account with limited permissions");
-                            // Create account with minimal data
-                            return [
-                                'id' => 'unknown_' . uniqid(),
-                                'username' => 'tiktok_user_' . uniqid(),
-                                'name' => 'TikTok User',
-                                'profilePicture' => null,
-                                'raw' => ['error' => 'scope_not_authorized']
-                            ];
-                        }
-                    }
-                    
-                    throw new \Exception('Failed to fetch TikTok user profile: ' . ($errorData['error']['message'] ?? 'Unknown error'));
+                    throw new \Exception('Failed to fetch TikTok user profile');
                 }
                 
                 $profileData = json_decode($response->getBody()->getContents(), true);
@@ -589,10 +570,15 @@ class OAuthController extends Controller
 
                 // Format response based on TikTok API structure
                 return [
-                    'id' => $profileData['data']['user']['open_id'] ?? '',
-                    'username' => $profileData['data']['user']['union_id'] ?? '',
-                    'name' => $profileData['data']['user']['display_name'] ?? 'TikTok User',
-                    'profilePicture' => $profileData['data']['user']['avatar_url'] ?? null,
+                    'id' => $profileData['data']['user']['id'] ?? '',
+                    'username' => $profileData['data']['user']['username'] ?? '',
+                    'name' => $profileData['data']['user']['display_name'] ?? $profileData['data']['user']['username'] ?? 'TikTok User',
+                    'bio' => $profileData['data']['user']['bio'] ?? '',
+                    'profilePicture' => $profileData['data']['user']['avatar'] ?? null,
+                    'likes_count' => $profileData['data']['user']['likes_count'] ?? 0,
+                    'followers_count' => $profileData['data']['user']['followers_count'] ?? 0,
+                    'following_count' => $profileData['data']['user']['following_count'] ?? 0,
+                    'video_count' => $profileData['data']['user']['video_count'] ?? 0,
                     'raw' => $profileData
                 ];
                 break;
