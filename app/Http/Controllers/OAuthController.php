@@ -160,6 +160,13 @@ class OAuthController extends Controller
                 return view('oauth-callback')->with('error', "OAuth error: {$errorMessage}");
             }
             
+            // Log OAuth callback received
+            Log::info("OAuth callback received for platform: {$platform}", [
+                'code' => !empty($request->code) ? 'present' : 'missing',
+                'state' => $request->state ?? 'missing',
+                'request_params' => $request->all()
+            ]);
+
             // Exchange authorization code for access token
             $tokenData = $this->exchangeCodeForToken($platform, $request->code);
 
@@ -174,6 +181,14 @@ class OAuthController extends Controller
             
 
             // Create or update social account
+            Log::info("Creating/Updating SocialAccount for TikTok", [
+                'user_id' => Auth::id(),
+                'platform' => $platform,
+                'profile_id' => $profileData['id'] ?? 'missing',
+                'profile_name' => $profileData['name'] ?? $profileData['username'] ?? 'Unknown',
+                'token_present' => !empty($tokenData['access_token'])
+            ]);
+
             $socialAccount = SocialAccount::updateOrCreate(
                 [
                     'user_id' => Auth::id(),
@@ -193,13 +208,20 @@ class OAuthController extends Controller
                 ]
             );
 
+            Log::info("SocialAccount created/updated successfully", [
+                'account_id' => $socialAccount->id,
+                'account_name' => $socialAccount->account_name,
+                'platform' => $socialAccount->platform
+            ]);
+
             // Return OAuth callback view that closes popup
             return view('oauth-callback');
 
         } catch (\Exception $e) {
             \Log::error("OAuth callback error for {$platform}: " . $e->getMessage(), [
                 'exception' => $e,
-                'request_data' => $request->all()
+                'request_data' => $request->all(),
+                'user_id' => Auth::id() ?? 'not_authenticated'
             ]);
             
             // Return error callback view
@@ -286,6 +308,20 @@ class OAuthController extends Controller
                         'redirect_uri' => $redirectUri,
                     ]
                 ]);
+
+                // Log the response status
+                Log::info("TikTok token exchange response", [
+                    'status_code' => $response->getStatusCode(),
+                    'success' => $response->successful()
+                ]);
+
+                if (!$response->successful()) {
+                    Log::error("TikTok token exchange failed", [
+                        'status_code' => $response->getStatusCode(),
+                        'response_body' => $response->getBody()->getContents()
+                    ]);
+                }
+
                 break;
 
             case 'x':
@@ -319,6 +355,12 @@ class OAuthController extends Controller
 
             case 'tiktok':
                 // TikTok OAuth 2.0 token exchange
+                Log::info("Exchanging TikTok OAuth code for token", [
+                    'client_key' => $clientId,
+                    'redirect_uri' => $redirectUri,
+                    'code_present' => !empty($code)
+                ]);
+
                 $response = $client->post("https://open.tiktokapis.com/v2/auth/token/", [
                     'headers' => [
                         'Content-Type' => 'application/x-www-form-urlencoded',
@@ -477,13 +519,38 @@ class OAuthController extends Controller
 
             case 'tiktok':
                 // Get TikTok user profile information
+                Log::info("Fetching TikTok user profile", [
+                    'access_token_present' => !empty($accessToken)
+                ]);
+
                 $response = $client->get("https://open.tiktokapis.com/v2/user/info/?fields=id,username,display_name,bio,avatar,likes_count,followers_count,following_count,video_count", [
                     'headers' => [
                         'Authorization' => "Bearer $accessToken",
                     ],
                 ]);
+
+                // Log profile response
+                Log::info("TikTok profile response", [
+                    'status_code' => $response->getStatusCode(),
+                    'success' => $response->successful()
+                ]);
+
+                if (!$response->successful()) {
+                    Log::error("TikTok profile fetch failed", [
+                        'status_code' => $response->getStatusCode(),
+                        'response_body' => $response->getBody()->getContents()
+                    ]);
+                    throw new \Exception('Failed to fetch TikTok user profile');
+                }
                 
                 $profileData = json_decode($response->getBody()->getContents(), true);
+
+                // Log the parsed profile data
+                Log::info("TikTok profile data parsed", [
+                    'user_id' => $profileData['data']['user']['id'] ?? 'missing',
+                    'username' => $profileData['data']['user']['username'] ?? 'missing',
+                    'has_data' => !empty($profileData)
+                ]);
 
                 // Format response based on TikTok API structure
                 return [
