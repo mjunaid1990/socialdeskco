@@ -119,10 +119,12 @@ class OAuthController extends Controller
                 ]);
 
             case 'tiktok':
-                // TikTok OAuth 2.0
-                $scope = 'user.info.basic,video.publish,video.list';
+                // TikTok OAuth 2.0 - Using v2 authorization endpoint
+                // Updated scope requirements based on latest API documentation
+                $scope = 'user.info.basic,video.list,video.upload'; // Adjust scopes based on your needs
+                
                 return "https://www.tiktok.com/v2/auth/authorize/?" . http_build_query([
-                    'client_key' => $clientId,
+                    'client_key' => $clientId, // TikTok uses client_key instead of client_id
                     'redirect_uri' => $redirectUri,
                     'scope' => $scope,
                     'response_type' => 'code',
@@ -370,9 +372,9 @@ class OAuthController extends Controller
                 break;
 
             case 'tiktok':
-                // TikTok OAuth 2.0 token exchange
+                // TikTok OAuth 2.0 token exchange - Using v2 endpoint
                 Log::info("Exchanging TikTok OAuth code for token", [
-                    'client_key' => $clientId,
+                    'client_key' => substr($clientId, 0, 10) . '...', // Log partial for security
                     'redirect_uri' => $redirectUri,
                     'code_present' => !empty($code)
                 ]);
@@ -380,15 +382,41 @@ class OAuthController extends Controller
                 $response = $client->post("https://open.tiktokapis.com/v2/oauth/token/", [
                     'headers' => [
                         'Content-Type' => 'application/x-www-form-urlencoded',
+                        'Cache-Control' => 'no-cache',
                     ],
                     'form_params' => [
-                        'client_key' => $clientId,
+                        'client_key' => $clientId, // TikTok uses client_key
                         'client_secret' => $clientSecret,
                         'code' => $code,
                         'grant_type' => 'authorization_code',
                         'redirect_uri' => $redirectUri,
                     ]
                 ]);
+
+                $tokenData = json_decode($response->getBody()->getContents(), true);
+
+                // Log token response structure
+                Log::info("TikTok token exchange response", [
+                    'status_code' => $response->getStatusCode(),
+                    'has_access_token' => isset($tokenData['access_token']),
+                    'has_refresh_token' => isset($tokenData['refresh_token']),
+                    'has_open_id' => isset($tokenData['open_id']),
+                    'expires_in' => $tokenData['expires_in'] ?? 'not_provided',
+                    'scope' => $tokenData['scope'] ?? 'not_provided',
+                    'error' => $tokenData['error'] ?? 'none'
+                ]);
+
+                // Check for TikTok API errors
+                if (isset($tokenData['error'])) {
+                    throw new \Exception("TikTok API Error: " . ($tokenData['error_description'] ?? $tokenData['error']));
+                }
+
+                // Store open_id for later use
+                if (isset($tokenData['open_id'])) {
+                    $tokenData['tiktok_open_id'] = $tokenData['open_id'];
+                }
+
+                return $tokenData;
 
                 
                 break;
@@ -534,51 +562,87 @@ class OAuthController extends Controller
                 break;
 
             case 'tiktok':
-                // Get TikTok user profile information
+                // TikTok v2 API - Get user profile information
+                // Use open_id from token if available, otherwise rely on access token
+                $openId = $tokenData['tiktok_open_id'] ?? $tokenData['open_id'] ?? null;
+                
                 Log::info("Fetching TikTok user profile", [
+                    'open_id' => $openId ? 'present' : 'not_present',
                     'access_token_present' => !empty($accessToken)
                 ]);
 
-                $response = $client->get("https://open.tiktokapis.com/v2/user/info/?fields=id,username,display_name,bio,avatar,likes_count,followers_count,following_count,video_count", [
+                // Request basic profile fields available with user.info.basic scope
+                // According to TikTok docs, basic scope provides: open_id, union_id, avatar_url, display_name
+                $fields = [
+                    'open_id',
+                    'union_id', 
+                    'avatar_url',
+                    'display_name'
+                ];
+
+                // These fields require additional scopes (user.info.profile, user.info.stats)
+                // Only request if you have the scopes approved
+                // $fields[] = 'bio_description';
+                // $fields[] = 'profile_deep_link';
+                // $fields[] = 'is_verified';
+                // $fields[] = 'follower_count';
+                // $fields[] = 'following_count';
+                // $fields[] = 'likes_count';
+                // $fields[] = 'video_count';
+
+                $fieldsParam = implode(',', $fields);
+
+                $response = $client->get("https://open.tiktokapis.com/v2/user/info/", [
                     'headers' => [
                         'Authorization' => "Bearer $accessToken",
                     ],
+                    'query' => [
+                        'fields' => $fieldsParam
+                    ]
                 ]);
 
-                // Log profile response
+                $responseBody = $response->getBody()->getContents();
+                $profileData = json_decode($responseBody, true);
+
                 Log::info("TikTok profile response", [
                     'status_code' => $response->getStatusCode(),
-                    'success' => $response->successful()
+                    'has_data' => isset($profileData['data']),
+                    'has_error' => isset($profileData['error']),
+                    'error_code' => $profileData['error']['code'] ?? 'none'
                 ]);
 
-                if (!$response->successful()) {
-                    Log::error("TikTok profile fetch failed", [
-                        'status_code' => $response->getStatusCode(),
-                        'response_body' => $response->getBody()->getContents()
-                    ]);
-                    throw new \Exception('Failed to fetch TikTok user profile');
+                // Check for API errors
+                if (isset($profileData['error']) && $profileData['error']['code'] !== 'ok') {
+                    throw new \Exception("TikTok API Error: " . ($profileData['error']['message'] ?? 'Unknown error'));
                 }
-                
-                $profileData = json_decode($response->getBody()->getContents(), true);
 
-                // Log the parsed profile data
-                Log::info("TikTok profile data parsed", [
-                    'user_id' => $profileData['data']['user']['id'] ?? 'missing',
-                    'username' => $profileData['data']['user']['username'] ?? 'missing',
-                    'has_data' => !empty($profileData)
+                if (!isset($profileData['data']['user'])) {
+                    throw new \Exception('Failed to fetch TikTok user profile - no user data in response');
+                }
+
+                $user = $profileData['data']['user'];
+
+                Log::info("TikTok profile data parsed successfully", [
+                    'open_id' => $user['open_id'] ?? 'missing',
+                    'display_name' => $user['display_name'] ?? 'missing',
+                    'has_avatar' => !empty($user['avatar_url'])
                 ]);
 
-                // Format response based on TikTok API structure
+                // Return formatted profile data
                 return [
-                    'id' => $profileData['data']['user']['id'] ?? '',
-                    'username' => $profileData['data']['user']['username'] ?? '',
-                    'name' => $profileData['data']['user']['display_name'] ?? $profileData['data']['user']['username'] ?? 'TikTok User',
-                    'bio' => $profileData['data']['user']['bio'] ?? '',
-                    'profilePicture' => $profileData['data']['user']['avatar'] ?? null,
-                    'likes_count' => $profileData['data']['user']['likes_count'] ?? 0,
-                    'followers_count' => $profileData['data']['user']['followers_count'] ?? 0,
-                    'following_count' => $profileData['data']['user']['following_count'] ?? 0,
-                    'video_count' => $profileData['data']['user']['video_count'] ?? 0,
+                    'id' => $user['open_id'] ?? $openId ?? '', // Use open_id as primary identifier
+                    'union_id' => $user['union_id'] ?? null,
+                    'username' => $user['username'] ?? null, // May not be available with basic scope
+                    'name' => $user['display_name'] ?? 'TikTok User',
+                    'display_name' => $user['display_name'] ?? 'TikTok User',
+                    'bio' => $user['bio_description'] ?? null,
+                    'profilePicture' => $user['avatar_url'] ?? $user['avatar_url_100'] ?? $user['avatar_large_url'] ?? null,
+                    'profile_deep_link' => $user['profile_deep_link'] ?? null,
+                    'is_verified' => $user['is_verified'] ?? false,
+                    'follower_count' => $user['follower_count'] ?? 0,
+                    'following_count' => $user['following_count'] ?? 0,
+                    'likes_count' => $user['likes_count'] ?? 0,
+                    'video_count' => $user['video_count'] ?? 0,
                     'raw' => $profileData
                 ];
                 break;
