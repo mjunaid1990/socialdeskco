@@ -120,7 +120,7 @@ class OAuthController extends Controller
 
             case 'tiktok':
                 // TikTok OAuth 2.0
-                $scope = 'user.info.basic,video.publish,video.list';
+                $scope = 'user.info.basic,video.list';
                 return "https://www.tiktok.com/v2/auth/authorize/?" . http_build_query([
                     'client_key' => $clientId,
                     'redirect_uri' => $redirectUri,
@@ -164,6 +164,7 @@ class OAuthController extends Controller
             Log::info("OAuth callback received for platform: {$platform}", [
                 'code' => !empty($request->code) ? 'present' : 'missing',
                 'state' => $request->state ?? 'missing',
+                'scopes_authorized' => $request->scopes ?? 'not_provided',
                 'request_params' => $request->all()
             ]);
 
@@ -536,11 +537,29 @@ class OAuthController extends Controller
                 ]);
 
                 if (!$response->successful()) {
+                    $errorBody = $response->getBody()->getContents();
                     Log::error("TikTok profile fetch failed", [
                         'status_code' => $response->getStatusCode(),
-                        'response_body' => $response->getBody()->getContents()
+                        'response_body' => $errorBody
                     ]);
-                    throw new \Exception('Failed to fetch TikTok user profile');
+                    
+                    // Handle scope authorization errors gracefully
+                    if ($response->getStatusCode() === 401) {
+                        $errorData = json_decode($errorBody, true);
+                        if (isset($errorData['error']['code']) && $errorData['error']['code'] === 'scope_not_authorized') {
+                            Log::warning("User didn't authorize required scopes, creating account with limited permissions");
+                            // Create account with minimal data
+                            return [
+                                'id' => 'unknown_' . uniqid(),
+                                'username' => 'tiktok_user_' . uniqid(),
+                                'name' => 'TikTok User',
+                                'profilePicture' => null,
+                                'raw' => ['error' => 'scope_not_authorized']
+                            ];
+                        }
+                    }
+                    
+                    throw new \Exception('Failed to fetch TikTok user profile: ' . ($errorData['error']['message'] ?? 'Unknown error'));
                 }
                 
                 $profileData = json_decode($response->getBody()->getContents(), true);
