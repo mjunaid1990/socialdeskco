@@ -171,11 +171,27 @@ class OAuthController extends Controller
             // Exchange authorization code for access token
             $tokenData = $this->exchangeCodeForToken($platform, $request->code);
 
-         
+            // Log token data for debugging
+            Log::info("TikTok token data received", [
+                'access_token_present' => isset($tokenData['access_token']),
+                'scopes_in_token' => $tokenData['scope'] ?? 'not_provided',
+                'open_id' => $tokenData['open_id'] ?? 'not_provided',
+                'token_type' => $tokenData['token_type'] ?? 'not_provided'
+            ]);
             
             if (!isset($tokenData['access_token'])) {
                 throw new \Exception('Failed to obtain access token');
             }
+
+            // Verify that authorized scopes match token scopes
+            $authorizedScopes = explode(',', $request->scopes ?? '');
+            $tokenScopes = explode(',', $tokenData['scope'] ?? '');
+            
+            Log::info("Scope comparison", [
+                'authorized_scopes' => $authorizedScopes,
+                'token_scopes' => $tokenScopes,
+                'match' => array_intersect($authorizedScopes, $tokenScopes) === $authorizedScopes
+            ]);
             // Get user profile
             $profileData = $this->getUserProfile($platform, $tokenData['access_token']);
             
@@ -524,7 +540,7 @@ class OAuthController extends Controller
                     'access_token_present' => !empty($accessToken)
                 ]);
 
-                $response = $client->get("https://open.tiktokapis.com/v2/user/info/?fields=id,username,display_name,bio,avatar,likes_count,followers_count,following_count,video_count", [
+                $response = $client->get("https://open.tiktokapis.com/v2/user/info/?fields=open_id,union_id,avatar_url,display_name", [
                     'headers' => [
                         'Authorization' => "Bearer $accessToken",
                     ],
@@ -573,15 +589,10 @@ class OAuthController extends Controller
 
                 // Format response based on TikTok API structure
                 return [
-                    'id' => $profileData['data']['user']['id'] ?? '',
-                    'username' => $profileData['data']['user']['username'] ?? '',
-                    'name' => $profileData['data']['user']['display_name'] ?? $profileData['data']['user']['username'] ?? 'TikTok User',
-                    'bio' => $profileData['data']['user']['bio'] ?? '',
-                    'profilePicture' => $profileData['data']['user']['avatar'] ?? null,
-                    'likes_count' => $profileData['data']['user']['likes_count'] ?? 0,
-                    'followers_count' => $profileData['data']['user']['followers_count'] ?? 0,
-                    'following_count' => $profileData['data']['user']['following_count'] ?? 0,
-                    'video_count' => $profileData['data']['user']['video_count'] ?? 0,
+                    'id' => $profileData['data']['user']['open_id'] ?? '',
+                    'username' => $profileData['data']['user']['union_id'] ?? '',
+                    'name' => $profileData['data']['user']['display_name'] ?? 'TikTok User',
+                    'profilePicture' => $profileData['data']['user']['avatar_url'] ?? null,
                     'raw' => $profileData
                 ];
                 break;
