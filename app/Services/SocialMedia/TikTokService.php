@@ -45,11 +45,11 @@ class TikTokService extends BaseSocialMediaService
                 'Content-Type' => 'application/json',
             ])->post("https://open.tiktokapis.com/v2/post/publish/video/init/", [
                 'post_info' => [
-                    'title' => $post->content,
-                    'privacy_level' => 'PUBLIC_TO_EVERYONE',
-                    'disable_duet' => false,
-                    'disable_comment' => false,
-                    'disable_stitch' => false,
+                    'title' => $post->tiktok_settings['caption'] ?? $post->content,
+                    'privacy_level' => $post->tiktok_settings['privacy'] ?? 'PUBLIC_TO_EVERYONE',
+                    'disable_duet' => $post->tiktok_settings['disable_duet'] ?? false,
+                    'disable_comment' => $post->tiktok_settings['disable_comments'] ?? false,
+                    'disable_stitch' => $post->tiktok_settings['disable_stitch'] ?? false,
                 ],
                 'source_info' => [
                     'source' => 'PULL_FROM_URL',
@@ -95,10 +95,12 @@ class TikTokService extends BaseSocialMediaService
                 'Content-Type' => 'application/json',
             ])->post("https://open.tiktokapis.com/v2/post/publish/content/init/", [
                 'post_info' => [
-                    'title' => $post->content,
-                    'privacy_level' => 'PUBLIC_TO_EVERYONE',
-                    'disable_comment' => false,
+                    'title' => $post->tiktok_settings['caption'] ?? $post->content,
+                    'privacy_level' => $post->tiktok_settings['privacy'] ?? 'PUBLIC_TO_EVERYONE',
+                    'disable_comment' => $post->tiktok_settings['disable_comments'] ?? false,
                     'auto_add_music' => false,
+                    'disable_duet' => $post->tiktok_settings['disable_duet'] ?? false,
+                    'disable_stitch' => $post->tiktok_settings['disable_stitch'] ?? false,
                 ],
                 'source_info' => [
                     'source' => 'PULL_FROM_URL',
@@ -142,10 +144,12 @@ class TikTokService extends BaseSocialMediaService
             'Content-Type' => 'application/json',
         ])->post("https://open.tiktokapis.com/v2/post/publish/content/init/", [
             'post_info' => [
-                'title' => $post->content,
-                'privacy_level' => 'PUBLIC_TO_EVERYONE',
-                'disable_comment' => false,
+                'title' => $post->tiktok_settings['caption'] ?? $post->content,
+                'privacy_level' => $post->tiktok_settings['privacy'] ?? 'PUBLIC_TO_EVERYONE',
+                'disable_comment' => $post->tiktok_settings['disable_comments'] ?? false,
                 'auto_add_music' => false,
+                'disable_duet' => $post->tiktok_settings['disable_duet'] ?? false,
+                'disable_stitch' => $post->tiktok_settings['disable_stitch'] ?? false,
             ],
             'source_info' => [
                 'source' => 'PULL_FROM_URL',

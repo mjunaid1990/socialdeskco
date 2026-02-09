@@ -90,6 +90,7 @@ class InstagramService extends BaseSocialMediaService
                 'caption' => $post->content,
                 'image_url' => $imageUrl,
                 'media_type' => 'IMAGE',
+                'alt_text' => $post->instagram_settings['alt_text'] ?? '',
             ];
             
             $apiUrl = "https://graph.facebook.com/" . $this->getApiVersion('instagram', '19.0') . "/{$instagramUserId}/media";
@@ -137,6 +138,7 @@ class InstagramService extends BaseSocialMediaService
                 'caption' => $post->content,
                 'video_url' => $videoUrl,
                 'media_type' => 'VIDEO',
+                'alt_text' => $post->instagram_settings['alt_text'] ?? '',
             ];
             
             $apiUrl = "https://graph.facebook.com/" . $this->getApiVersion('instagram', '19.0') . "/{$instagramUserId}/media";

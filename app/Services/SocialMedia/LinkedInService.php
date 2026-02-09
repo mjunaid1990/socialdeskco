@@ -19,7 +19,7 @@ class LinkedInService extends BaseSocialMediaService
                 'specificContent' => [
                     'com.linkedin.ugc.ShareContent' => [
                         'shareCommentary' => [
-                            'text' => $post->content,
+                            'text' => $post->content . ' ' . ($post->linkedin_settings['hashtags'] ?? ''),
                         ],
                         'shareMediaCategory' => 'NONE',
                     ],

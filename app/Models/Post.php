@@ -22,6 +22,13 @@ class Post extends Model
         'likes_count',
         'comments_count',
         'shares_count',
+        'facebook_settings',
+        'instagram_settings',
+        'x_settings',
+        'linkedin_settings',
+        'youtube_settings',
+        'tiktok_settings',
+        'other_platform_settings',
     ];
 
     protected $casts = [
@@ -30,6 +37,13 @@ class Post extends Model
         'platform_specific_data' => 'array',
         'scheduled_at' => 'datetime',
         'published_at' => 'datetime',
+        'facebook_settings' => 'array',
+        'instagram_settings' => 'array',
+        'x_settings' => 'array',
+        'linkedin_settings' => 'array',
+        'youtube_settings' => 'array',
+        'tiktok_settings' => 'array',
+        'other_platform_settings' => 'array',
     ];
 
     // Relationship with user

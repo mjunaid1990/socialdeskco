@@ -63,10 +63,11 @@ class YouTubeService extends BaseSocialMediaService
             'snippet' => [
                 'title' => $post->title,
                 'description' => $post->content,
-                'categoryId' => '22', // People & Blogs category (default)
+                'categoryId' => $post->youtube_settings['category'] ?? '22', // Use user-selected category or default
+                'tags' => !empty($post->youtube_settings['tags']) ? explode(',', $post->youtube_settings['tags']) : [],
             ],
             'status' => [
-                'privacyStatus' => 'public', // Can be 'private', 'unlisted', or 'public'
+                'privacyStatus' => $post->youtube_settings['privacy'] ?? 'public', // Use user-selected privacy or default
                 'selfDeclaredMadeForKids' => false,
             ]
         ];

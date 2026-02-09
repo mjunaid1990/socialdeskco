@@ -1,15 +1,21 @@
 <script>
-function multiStepForm() {
+function multiStepForm(accountPlatforms) {
+    // Handle case when accountPlatforms is undefined or invalid
+    if (!accountPlatforms || typeof accountPlatforms !== 'object') {
+        accountPlatforms = {};
+    }
+    
     return {
         currentStep: 0,
         mediaType: '',
-        selectedPlatforms: [],
+        selectedAccounts: [],
         uploadedFiles: [],
+        accountPlatforms: accountPlatforms, // Pass account to platform mapping
         steps: [
-            { title: 'Basic Info', validation: ['title', 'description'] },
+            { title: 'Accounts', validation: ['selected_accounts'] },
             { title: 'Media Type', validation: ['media_type'] },
-            { title: 'Platforms', validation: ['platforms'] },
-            { title: 'Settings', validation: ['status'] }
+            { title: 'Basic Info', validation: ['title', 'description'] },
+            { title: 'Platform Fields', validation: ['status'] }
         ],
 
         init() {
@@ -27,10 +33,34 @@ function multiStepForm() {
                 });
             }
 
-            // Track selected platforms
+            // Track selected accounts
             this.$watch('currentStep', () => {
+                if (this.currentStep === 1) {
+                    // Reset media type when returning to account selection
+                    this.mediaType = '';
+                }
                 if (this.currentStep === 2) {
-                    this.updateSelectedPlatforms();
+                    // Initialize character counter for description
+                    const description = document.getElementById('description');
+                    const counter = document.getElementById('description-count');
+                    if (description && counter) {
+                        counter.textContent = description.value.length;
+                    }
+                }
+                if (this.currentStep === 3) {
+                    // Initialize TikTok caption counter
+                    const tiktokCaption = document.querySelector('textarea[name="tiktok_caption"]');
+                    const tiktokCounter = document.getElementById('tiktok-caption-count');
+                    if (tiktokCaption && tiktokCounter) {
+                        tiktokCounter.textContent = tiktokCaption.value.length;
+                        tiktokCaption.addEventListener('input', function() {
+                            tiktokCounter.textContent = this.value.length;
+                            if (this.value.length > 2200) {
+                                this.value = this.value.substring(0, 2200);
+                                tiktokCounter.textContent = 2200;
+                            }
+                        });
+                    }
                 }
             });
 
@@ -60,6 +90,18 @@ function multiStepForm() {
             const currentValidation = this.steps[this.currentStep].validation;
             
             for (let field of currentValidation) {
+                if (field === 'selected_accounts') {
+                    if (!this.validateAccounts()) {
+                        return false;
+                    }
+                }
+                
+                if (field === 'media_type') {
+                    if (!this.validateMediaType()) {
+                        return false;
+                    }
+                }
+                
                 if (field === 'title') {
                     const title = document.getElementById('title');
                     if (!title || !title.value.trim()) {
@@ -78,33 +120,31 @@ function multiStepForm() {
                     }
                 }
                 
-                if (field === 'media_type') {
-                    // If no media type is selected (text-only), that's fine
-                    if (!this.mediaType) {
-                        return true; // Allow proceeding with text-only post
-                    }
-                    
-                    // If media type is selected, ensure files are uploaded
-                    if (this.mediaType && this.uploadedFiles.length === 0) {
-                        this.showError(`Please upload at least one ${this.mediaType} file or select "Text Only"`);
-                        return false;
-                    }
-                }
-                
-                if (field === 'platforms') {
-                    const platforms = document.querySelectorAll('input[name="platforms[]"]:checked');
-                    if (platforms.length === 0) {
-                        this.showError('Please select at least one platform');
-                        return false;
-                    }
-                }
-                
                 if (field === 'status') {
-                    const status = document.getElementById('status');
+                    const status = document.getElementById('post_status');
                     if (!status || !status.value) {
-                        this.showError('Please select a post status');
+                        this.showError('Post status is required');
                         if (status) status.focus();
                         return false;
+                    }
+                    
+                    // If status is scheduled, validate scheduled time
+                    if (status.value === 'scheduled') {
+                        const scheduledAt = document.getElementById('scheduled_at');
+                        if (!scheduledAt || !scheduledAt.value) {
+                            this.showError('Schedule date and time is required when status is scheduled');
+                            if (scheduledAt) scheduledAt.focus();
+                            return false;
+                        }
+                        
+                        // Validate that scheduled time is in the future
+                        const scheduledTime = new Date(scheduledAt.value);
+                        const now = new Date();
+                        if (scheduledTime <= now) {
+                            this.showError('Schedule time must be in the future');
+                            if (scheduledAt) scheduledAt.focus();
+                            return false;
+                        }
                     }
                 }
             }
@@ -112,42 +152,80 @@ function multiStepForm() {
             return true;
         },
 
-        updateSelectedPlatforms() {
-            const platforms = document.querySelectorAll('input[name="platforms[]"]:checked');
-            this.selectedPlatforms = Array.from(platforms).map(input => input.value);
+        // Get common media types supported by all selected accounts
+        getCommonMediaTypes() {
+            if (this.selectedAccounts.length === 0) return ['text', 'image', 'video'];
+            
+            // This would need to be populated from server-side data
+            // For now, we'll implement a simplified version
+            const platformSupport = {
+                'facebook': ['text', 'image', 'video'],
+                'x': ['text', 'image', 'video'],
+                'instagram': ['image', 'video'],
+                'linkedin': ['text', 'image', 'video'],
+                'youtube': ['video'],
+                'tiktok': ['video']
+            };
+            
+            // Get platforms of selected accounts
+            const selectedPlatforms = this.selectedAccounts.map(accountId => {
+                // This would need to map accountId to platform
+                // For demo purposes, we'll assume a mapping
+                return this.getAccountPlatform(accountId);
+            });
+            
+            // Find intersection of supported media types
+            let commonTypes = ['text', 'image', 'video']; // Start with all types
+            
+            selectedPlatforms.forEach(platform => {
+                if (platformSupport[platform]) {
+                    commonTypes = commonTypes.filter(type => 
+                        platformSupport[platform].includes(type)
+                    );
+                }
+            });
+            
+            return commonTypes;
         },
 
-        hasSelectedPlatform(platformName) {
-            // Get selected platform checkboxes
-            const selectedCheckboxes = document.querySelectorAll('input[name="platforms[]"]:checked');
-            
-            // Check if any selected checkbox belongs to the specified platform
-            for (let checkbox of selectedCheckboxes) {
-                const container = checkbox.closest('.border-gray-200');
-                if (!container) continue;
-                
-                // Look for platform icon with specific color class
-                const colorClass = this.getPlatformColor(platformName);
-                const platformIcon = container.querySelector(`.text-${colorClass}`);
-                
-                if (platformIcon) {
-                    return true;
-                }
+        // Get platform for a given account ID
+        getAccountPlatform(accountId) {
+            return this.accountPlatforms[accountId] || 'unknown';
+        },
+
+        // Validate account selection
+        validateAccounts() {
+            if (this.selectedAccounts.length === 0) {
+                this.showError('Please select at least one social account');
+                return false;
+            }
+            return true;
+        },
+
+        // Validate media type selection
+        validateMediaType() {
+            if (this.getCommonMediaTypes().length === 0) {
+                this.showError('No common media types available for selected platforms');
+                return false;
             }
             
-            return false;
-        },
-
-        getPlatformColor(platformName) {
-            const colors = {
-                'facebook': 'blue-600',
-                'instagram': 'pink-600', 
-                'x': 'black',
-                'linkedin': 'blue-700',
-                'youtube': 'red-600',
-                'tiktok': 'black'
-            };
-            return colors[platformName] || 'gray-600';
+            if (!this.mediaType) {
+                this.showError('Please select a media type');
+                return false;
+            }
+            
+            if (!this.getCommonMediaTypes().includes(this.mediaType)) {
+                this.showError(`Selected media type not supported by all chosen platforms`);
+                return false;
+            }
+            
+            // If media type is selected (not text), ensure files are uploaded
+            if (this.mediaType !== 'text' && this.uploadedFiles.length === 0) {
+                this.showError(`Please upload at least one ${this.mediaType} file`);
+                return false;
+            }
+            
+            return true;
         },
 
         handleMediaUpload(event) {
@@ -207,7 +285,17 @@ function multiStepForm() {
         },
 
         submitForm() {
-            if (this.validateCurrentStep()) {
+            // Validate all steps before submission
+            let isValid = true;
+            for (let i = 0; i < this.steps.length; i++) {
+                this.currentStep = i;
+                if (!this.validateCurrentStep()) {
+                    isValid = false;
+                    break;
+                }
+            }
+            
+            if (isValid) {
                 // Get the parent form (the main form that contains this multi-step form)
                 const form = this.$el.closest('form');
                 if (!form) {
@@ -217,6 +305,11 @@ function multiStepForm() {
                 
                 // Create FormData for proper file upload handling
                 const formData = new FormData(form);
+                
+                // Add selected accounts
+                this.selectedAccounts.forEach(accountId => {
+                    formData.append('selected_accounts[]', accountId);
+                });
                 
                 // Add uploaded files to FormData
                 this.uploadedFiles.forEach((fileObj, index) => {

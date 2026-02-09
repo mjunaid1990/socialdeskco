@@ -48,6 +48,9 @@ class FacebookService extends BaseSocialMediaService
         
         $payload = [
             'message' => $post->content,
+            'privacy' => [
+                'value' => $post->facebook_settings['privacy'] ?? 'public'
+            ],
         ];
         
         $response = $this->makeApiRequest('post', 
@@ -84,6 +87,9 @@ class FacebookService extends BaseSocialMediaService
         
         $payload = [
             'message' => $post->content . "\n\n[Image: " . basename($imageUrl) . "]",
+            'privacy' => [
+                'value' => $post->facebook_settings['privacy'] ?? 'public'
+            ],
         ];
         
         $response = $this->makeApiRequest('post', 
@@ -115,6 +121,9 @@ class FacebookService extends BaseSocialMediaService
             'file_url' => $videoUrl,
             'description' => $post->content,
             'published' => true,
+            'privacy' => [
+                'value' => $post->facebook_settings['privacy'] ?? 'public'
+            ],
         ];
         
         $response = $this->makeApiRequest('post', 

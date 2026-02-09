@@ -10,7 +10,7 @@
     </div>
 
     <div class="bg-white rounded-lg shadow-md p-6">
-        <form action="{{ route('admin.posts.store') }}" method="POST" enctype="multipart/form-data" x-data="multiStepForm()" @submit.prevent="submitForm">
+        <form action="{{ route('admin.posts.store') }}" method="POST" enctype="multipart/form-data" x-data="multiStepForm({{ json_encode($accountPlatforms ?? []) }})" @submit.prevent="submitForm">
             @csrf
             @include('backend.posts._multi_step_form')
             

@@ -38,7 +38,14 @@ class PostController extends Controller
     {
         $socialAccounts = SocialAccount::where('user_id', Auth::id())->where('is_active', true)->get();
         $post = new Post();
-        return view('backend.posts.create', compact('socialAccounts', 'post'));
+        
+        // Create account to platform mapping for frontend
+        $accountPlatforms = [];
+        foreach ($socialAccounts as $account) {
+            $accountPlatforms[$account->id] = $account->platform;
+        }
+        
+        return view('backend.posts.create', compact('socialAccounts', 'post', 'accountPlatforms'));
     }
 
     /**
@@ -72,6 +79,18 @@ class PostController extends Controller
             'scheduled_at' => 'nullable|date',
             'media' => 'nullable|array',
             'media.*' => 'file|max:10240', // Max 10MB per file
+            'facebook_settings' => 'nullable|array',
+            'instagram_settings' => 'nullable|array',
+            'x_settings' => 'nullable|array',
+            'linkedin_settings' => 'nullable|array',
+            'youtube_settings' => 'nullable|array',
+            'tiktok_settings' => 'nullable|array',
+            'tiktok_settings.caption' => 'nullable|string|max:2200',
+            'tiktok_settings.privacy' => 'nullable|in:PUBLIC_TO_EVERYONE,FRIENDS_AND_FAMILY,SELF_ONLY',
+            'tiktok_settings.disable_duet' => 'boolean',
+            'tiktok_settings.disable_stitch' => 'boolean',
+            'tiktok_settings.disable_comments' => 'boolean',
+            'other_platform_settings' => 'nullable|array',
         ]);
 
         Log::info('Validation passed, proceeding with post creation');
@@ -93,6 +112,14 @@ class PostController extends Controller
             $post->status = $request->status;
             $post->scheduled_at = $scheduledAt;
             
+            // Add platform-specific settings
+            $post->facebook_settings = $request->facebook_settings;
+            $post->instagram_settings = $request->instagram_settings;
+            $post->x_settings = $request->x_settings;
+            $post->linkedin_settings = $request->linkedin_settings;
+            $post->youtube_settings = $request->youtube_settings;
+            $post->tiktok_settings = $request->tiktok_settings;
+            $post->other_platform_settings = $request->other_platform_settings;
             // social_account_id is now nullable - we'll use many-to-many relationship instead
             
             Log::info('Post object created, processing media files', [
@@ -264,6 +291,18 @@ class PostController extends Controller
             'scheduled_at' => 'nullable|date',
             'media' => 'nullable|array',
             'media.*' => 'file|max:10240', // Simplified validation for debugging
+            'facebook_settings' => 'nullable|array',
+            'instagram_settings' => 'nullable|array',
+            'x_settings' => 'nullable|array',
+            'linkedin_settings' => 'nullable|array',
+            'youtube_settings' => 'nullable|array',
+            'tiktok_settings' => 'nullable|array',
+            'tiktok_settings.caption' => 'nullable|string|max:2200',
+            'tiktok_settings.privacy' => 'nullable|in:PUBLIC_TO_EVERYONE,FRIENDS_AND_FAMILY,SELF_ONLY',
+            'tiktok_settings.disable_duet' => 'boolean',
+            'tiktok_settings.disable_stitch' => 'boolean',
+            'tiktok_settings.disable_comments' => 'boolean',
+            'other_platform_settings' => 'nullable|array',
         ]);
 
         $post->social_account_id = $request->social_account_id;
@@ -271,6 +310,15 @@ class PostController extends Controller
         $post->content = $request->content;
         $post->status = $request->status;
         $post->scheduled_at = $request->scheduled_at;
+        
+        // Update platform-specific settings
+        $post->facebook_settings = $request->facebook_settings;
+        $post->instagram_settings = $request->instagram_settings;
+        $post->x_settings = $request->x_settings;
+        $post->linkedin_settings = $request->linkedin_settings;
+        $post->youtube_settings = $request->youtube_settings;
+        $post->tiktok_settings = $request->tiktok_settings;
+        $post->other_platform_settings = $request->other_platform_settings;
         
         // Handle media file uploads and existing media files
         $mediaFiles = [];
