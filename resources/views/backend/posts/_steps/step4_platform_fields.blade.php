@@ -87,7 +87,7 @@
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4 ml-7">
                     <div>
                         <label class="block text-sm font-medium text-gray-700 mb-1">Category <span class="text-red-500">*</span></label>
-                        <select name="youtube_settings[category]" required class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <select name="youtube_settings[category]" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
                             <option value="" {{ (old('youtube_settings.category', $post->youtube_settings['category'] ?? '') == '') ? 'selected' : '' }}>Select category...</option>
                             <option value="1" {{ (old('youtube_settings.category', $post->youtube_settings['category'] ?? '') == '1') ? 'selected' : '' }}>Film & Animation</option>
                             <option value="2" {{ (old('youtube_settings.category', $post->youtube_settings['category'] ?? '') == '2') ? 'selected' : '' }}>Autos & Vehicles</option>
@@ -108,7 +108,7 @@
                     </div>
                     <div>
                         <label class="block text-sm font-medium text-gray-700 mb-1">Privacy Status <span class="text-red-500">*</span></label>
-                        <select name="youtube_settings[privacy]" required class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <select name="youtube_settings[privacy]" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
                             <option value="public" {{ (old('youtube_settings.privacy', $post->youtube_settings['privacy'] ?? 'public') == 'public') ? 'selected' : '' }}>Public</option>
                             <option value="unlisted" {{ (old('youtube_settings.privacy', $post->youtube_settings['privacy'] ?? '') == 'unlisted') ? 'selected' : '' }}>Unlisted</option>
                             <option value="private" {{ (old('youtube_settings.privacy', $post->youtube_settings['privacy'] ?? '') == 'private') ? 'selected' : '' }}>Private</option>
