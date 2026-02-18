@@ -328,18 +328,20 @@ class OAuthController extends Controller
                 ]);
 
                 // Log the response status
-                Log::info("TikTok token exchange response", [
+                Log::info("LinkedIn token exchange response", [
                     'status_code' => $response->getStatusCode(),
-                    'success' => $response->successful()
+                    'success' => $response->getStatusCode() >= 200 && $response->getStatusCode() < 300
                 ]);
 
-                if (!$response->successful()) {
-                    Log::error("TikTok token exchange failed", [
+                if (!($response->getStatusCode() >= 200 && $response->getStatusCode() < 300)) {
+                    Log::error("LinkedIn token exchange failed", [
                         'status_code' => $response->getStatusCode(),
                         'response_body' => $response->getBody()->getContents()
                     ]);
                 }
 
+                // Return the token data directly for LinkedIn
+                return json_decode($response->getBody()->getContents(), true);
                 break;
 
             case 'x':
