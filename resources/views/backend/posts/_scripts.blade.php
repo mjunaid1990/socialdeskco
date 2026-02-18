@@ -12,7 +12,7 @@ function multiStepForm(accountPlatforms) {
         uploadedFiles: [],
         accountPlatforms: accountPlatforms, // Pass account to platform mapping
         steps: [
-            { title: 'Accounts', validation: ['selected_accounts'] },
+            { title: 'Accounts', validation: ['platforms'] },
             { title: 'Media Type', validation: ['media_type'] },
             { title: 'Basic Info', validation: ['title', 'description'] },
             { title: 'Platform Fields', validation: ['status'] }
@@ -90,7 +90,7 @@ function multiStepForm(accountPlatforms) {
             const currentValidation = this.steps[this.currentStep].validation;
             
             for (let field of currentValidation) {
-                if (field === 'selected_accounts') {
+                if (field === 'platforms') {
                     if (!this.validateAccounts()) {
                         return false;
                     }
@@ -306,9 +306,9 @@ function multiStepForm(accountPlatforms) {
                 // Create FormData for proper file upload handling
                 const formData = new FormData(form);
                 
-                // Add selected accounts
+                // Add selected accounts as platforms
                 this.selectedAccounts.forEach(accountId => {
-                    formData.append('selected_accounts[]', accountId);
+                    formData.append('platforms[]', accountId);
                 });
                 
                 // Add uploaded files to FormData

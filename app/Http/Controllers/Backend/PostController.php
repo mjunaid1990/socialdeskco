@@ -90,9 +90,9 @@ class PostController extends Controller
             'tiktok_settings' => 'nullable|array',
             'tiktok_settings.caption' => 'nullable|string|max:2200',
             'tiktok_settings.privacy' => 'nullable|in:PUBLIC_TO_EVERYONE,FRIENDS_AND_FAMILY,SELF_ONLY',
-            'tiktok_settings.disable_duet' => 'boolean',
-            'tiktok_settings.disable_stitch' => 'boolean',
-            'tiktok_settings.disable_comments' => 'boolean',
+            'tiktok_settings.disable_duet' => 'boolean|nullable',
+            'tiktok_settings.disable_stitch' => 'boolean|nullable',
+            'tiktok_settings.disable_comments' => 'boolean|nullable',
             'other_platform_settings' => 'nullable|array',
         ]);
 
@@ -305,9 +305,9 @@ class PostController extends Controller
             'tiktok_settings' => 'nullable|array',
             'tiktok_settings.caption' => 'nullable|string|max:2200',
             'tiktok_settings.privacy' => 'nullable|in:PUBLIC_TO_EVERYONE,FRIENDS_AND_FAMILY,SELF_ONLY',
-            'tiktok_settings.disable_duet' => 'boolean',
-            'tiktok_settings.disable_stitch' => 'boolean',
-            'tiktok_settings.disable_comments' => 'boolean',
+            'tiktok_settings.disable_duet' => 'boolean|nullable',
+            'tiktok_settings.disable_stitch' => 'boolean|nullable',
+            'tiktok_settings.disable_comments' => 'boolean|nullable',
             'other_platform_settings' => 'nullable|array',
         ]);
 
