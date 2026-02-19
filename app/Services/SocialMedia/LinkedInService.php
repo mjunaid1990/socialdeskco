@@ -58,7 +58,7 @@ class LinkedInService extends BaseSocialMediaService
                 'Authorization'              => 'Bearer ' . $this->getAccessToken($account),
                 'X-Restli-Protocol-Version'  => '2.0.0',
                 'Content-Type'               => 'application/json',
-                'LinkedIn-Version'           => '202502',
+                'LinkedIn-Version'           => '202602',
             ];
 
             // FIX: Use /rest/posts (new Posts API) instead of deprecated ugcPosts
@@ -234,7 +234,7 @@ class LinkedInService extends BaseSocialMediaService
             $response = Http::withHeaders([
                 'Authorization'             => 'Bearer ' . $this->getAccessToken($account),
                 'X-Restli-Protocol-Version' => '2.0.0',
-                'LinkedIn-Version'          => '202502',
+                'LinkedIn-Version'          => '202602',
             ])->delete("https://api.linkedin.com/rest/posts/{$encodedPostId}");
 
             if ($response->successful() || $response->status() === 204) {
