@@ -49,7 +49,7 @@ function multiStepForm(accountPlatforms) {
                 }
                 if (this.currentStep === 3) {
                     // Initialize TikTok caption counter
-                    const tiktokCaption = document.querySelector('textarea[name="tiktok_caption"]');
+                    const tiktokCaption = document.querySelector('textarea[name="tiktok_settings[caption]"]');
                     const tiktokCounter = document.getElementById('tiktok-caption-count');
                     if (tiktokCaption && tiktokCounter) {
                         tiktokCounter.textContent = tiktokCaption.value.length;

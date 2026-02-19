@@ -86,7 +86,7 @@
                 </h4>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4 ml-7">
                     <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">Category <span class="text-red-500">*</span></label>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Category</label>
                         <select name="youtube_settings[category]" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
                             <option value="" {{ (old('youtube_settings.category', $post->youtube_settings['category'] ?? '') == '') ? 'selected' : '' }}>Select category...</option>
                             <option value="1" {{ (old('youtube_settings.category', $post->youtube_settings['category'] ?? '') == '1') ? 'selected' : '' }}>Film & Animation</option>
@@ -107,7 +107,7 @@
                         </select>
                     </div>
                     <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">Privacy Status <span class="text-red-500">*</span></label>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Privacy Status</label>
                         <select name="youtube_settings[privacy]" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
                             <option value="public" {{ (old('youtube_settings.privacy', $post->youtube_settings['privacy'] ?? 'public') == 'public') ? 'selected' : '' }}>Public</option>
                             <option value="unlisted" {{ (old('youtube_settings.privacy', $post->youtube_settings['privacy'] ?? '') == 'unlisted') ? 'selected' : '' }}>Unlisted</option>
@@ -130,8 +130,8 @@
                 </h4>
                 <div class="space-y-4 ml-7">
                     <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">Caption <span class="text-red-500">*</span></label>
-                        <textarea name="tiktok_settings[caption]" required rows="3" maxlength="2200" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Write your caption with #hashtags and @mentions">{{ old('tiktok_settings.caption', $post->tiktok_settings['caption'] ?? '') }}</textarea>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Caption</label>
+                        <textarea name="tiktok_settings[caption]" rows="3" maxlength="2200" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Write your caption with #hashtags and @mentions">{{ old('tiktok_settings.caption', $post->tiktok_settings['caption'] ?? '') }}</textarea>
                         <div class="mt-1 text-sm text-gray-500 flex justify-between">
                             <span>Add #hashtags and @mentions for better discovery</span>
                             <span id="tiktok-caption-count">0</span> / 2200
