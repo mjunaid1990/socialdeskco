@@ -68,6 +68,7 @@ class LinkedInService extends BaseSocialMediaService
                 $headers
             );
 
+            
             if ($response->successful()) {
                 $responseData = $response->json();
                 // FIX: Posts API returns the post URN in the x-restli-id header
