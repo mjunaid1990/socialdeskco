@@ -14,6 +14,14 @@ class LinkedInService extends BaseSocialMediaService
 
     public function publishPost(Post $post, SocialAccount $account)
     {
+        $existingData = $post->platform_specific_data;
+        if (is_array($existingData) && !empty($existingData['post_id'])) {
+            Log::info('LinkedIn post already published, skipping', [
+                'post_id'          => $post->id,
+                'linkedin_post_id' => $existingData['post_id'],
+            ]);
+            return $existingData;
+        }
         try {
             $authorUrn = "urn:li:person:{$account->account_id}";
 
@@ -75,7 +83,7 @@ class LinkedInService extends BaseSocialMediaService
                 $postId = $response->header('x-restli-id') ?? $responseData['id'] ?? null;
 
                 $post->update([
-                    'platform_specific_data' => array_merge($responseData, ['post_id' => $postId]),
+                    'platform_specific_data' => array_merge($responseData ?? [], ['post_id' => $postId]),
                     'status'                 => 'published',
                     'published_at'           => now(),
                 ]);
