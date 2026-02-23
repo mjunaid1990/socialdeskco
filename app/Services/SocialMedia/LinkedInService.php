@@ -47,7 +47,7 @@ class LinkedInService extends BaseSocialMediaService
 
                 $mediaUrn = $this->uploadMediaToLinkedIn($mediaUrl, $account, $isVideo);
 
-                if ($mediaUrn) {
+                if ($mediaUrn && strpos($mediaUrn, 'digitalmediaAsset') === false) {
                     $payload['content'] = [
                         'media' => [
                             'id'    => $mediaUrn,
@@ -55,9 +55,10 @@ class LinkedInService extends BaseSocialMediaService
                         ],
                     ];
                 } else {
-                    Log::warning('LinkedInService: Failed to upload media, posting as text-only', [
+                    Log::warning('LinkedInService: Media not ready or wrong URN type, posting as text-only', [
                         'post_id'   => $post->id,
                         'media_url' => $mediaUrl,
+                        'media_urn' => $mediaUrn,
                     ]);
                 }
             }
