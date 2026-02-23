@@ -209,11 +209,13 @@ class LinkedInService extends BaseSocialMediaService
             if (!$uploadResponse->successful()) {
                 Log::error('LinkedInService: Failed to upload media to LinkedIn', [
                     'status_code' => $uploadResponse->status(),
+                    'response' => $uploadResponse->body(),
                 ]);
                 return null;
             }
 
-            return $imageAsset;
+            // Wait for media to be processed and check status
+            return $this->waitForMediaProcessing($imageAsset, $account);
         } catch (\Exception $e) {
             Log::error('LinkedInService: Error uploading media', [
                 'error'     => $e->getMessage(),
@@ -221,6 +223,47 @@ class LinkedInService extends BaseSocialMediaService
             ]);
             return null;
         }
+    }
+
+    private function waitForMediaProcessing(string $mediaAsset, SocialAccount $account, int $maxAttempts = 10): ?string
+    {
+        for ($attempt = 1; $attempt <= $maxAttempts; $attempt++) {
+            // Check media status
+            $statusResponse = Http::withHeaders([
+                'Authorization'             => 'Bearer ' . $this->getAccessToken($account),
+                'X-Restli-Protocol-Version' => '2.0.0',
+            ])->get("https://api.linkedin.com/v2/assets/{$mediaAsset}");
+
+            if ($statusResponse->successful()) {
+                $statusData = $statusResponse->json();
+                $status = $statusData['recipes'][0]['status'] ?? 'UNKNOWN';
+
+                Log::info('LinkedInService: Media processing status', [
+                    'attempt' => $attempt,
+                    'status' => $status,
+                    'media_asset' => $mediaAsset,
+                ]);
+
+                if ($status === 'READY') {
+                    Log::info('LinkedInService: Media is ready for use', ['media_asset' => $mediaAsset]);
+                    return $mediaAsset;
+                } elseif ($status === 'FAILED') {
+                    Log::error('LinkedInService: Media processing failed', ['media_asset' => $mediaAsset]);
+                    return null;
+                }
+            }
+
+            // Wait before next attempt (2 seconds)
+            if ($attempt < $maxAttempts) {
+                sleep(2);
+            }
+        }
+
+        Log::warning('LinkedInService: Media processing timeout', [
+            'media_asset' => $mediaAsset,
+            'max_attempts' => $maxAttempts,
+        ]);
+        return null;
     }
 
     public function deletePost(Post $post, SocialAccount $account)
