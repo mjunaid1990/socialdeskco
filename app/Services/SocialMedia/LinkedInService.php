@@ -234,12 +234,17 @@ class LinkedInService extends BaseSocialMediaService
             ]);
 
             if (is_array($platformData)) {
-                $linkedinPostId = $platformData['post_id'] ?? $platformData['id'] ?? null;
+                // Check multiple possible locations for LinkedIn post ID
+                $linkedinPostId = $platformData['post_id'] ?? 
+                                $platformData['id'] ?? 
+                                ($platformData['results'][$account->id]['post_id'] ?? 
+                                ($platformData['results'][$account->id]['id'] ?? null));
             }
 
             if (!$linkedinPostId) {
                 Log::warning('LinkedInService: No LinkedIn post ID found', [
                     'post_id' => $post->id,
+                    'account_id' => $account->id,
                     'platform_data' => $platformData
                 ]);
                 return false;
