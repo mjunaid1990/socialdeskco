@@ -32,8 +32,10 @@ class DeletePostJob implements ShouldQueue
     {
         try {
             Log::info("DeletePostJob: Starting deletion for post {$this->post->id} on platform {$this->account->platform}");
+            Log::info("DeletePostJob: Post platform_specific_data", ['data' => $this->post->platform_specific_data]);
 
             $result = $socialMediaService->deletePost($this->post, $this->account);
+            Log::info("DeletePostJob: SocialMediaService deletePost returned", ['result' => $result]);
 
             if ($result) {
                 Log::info("DeletePostJob: Successfully deleted post {$this->post->id} from {$this->account->platform}");

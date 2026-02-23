@@ -228,12 +228,20 @@ class LinkedInService extends BaseSocialMediaService
             $platformData   = $post->platform_specific_data;
             $linkedinPostId = null;
 
+            Log::info('LinkedInService: deletePost called', [
+                'post_id' => $post->id,
+                'platform_specific_data' => $platformData
+            ]);
+
             if (is_array($platformData)) {
                 $linkedinPostId = $platformData['post_id'] ?? $platformData['id'] ?? null;
             }
 
             if (!$linkedinPostId) {
-                Log::warning('LinkedInService: No LinkedIn post ID found', ['post_id' => $post->id]);
+                Log::warning('LinkedInService: No LinkedIn post ID found', [
+                    'post_id' => $post->id,
+                    'platform_data' => $platformData
+                ]);
                 return false;
             }
 
@@ -247,6 +255,12 @@ class LinkedInService extends BaseSocialMediaService
                 'X-Restli-Protocol-Version' => '2.0.0',
                 'LinkedIn-Version'          => '202602',
             ])->delete("https://api.linkedin.com/rest/posts/{$encodedPostId}");
+
+            Log::info('LinkedInService: Delete API response', [
+                'status_code' => $response->status(),
+                'successful' => $response->successful(),
+                'response_body' => $response->body()
+            ]);
 
             if ($response->successful() || $response->status() === 204) {
                 Log::info('LinkedInService: Post deleted successfully', ['linkedin_post_id' => $linkedinPostId]);
@@ -263,6 +277,7 @@ class LinkedInService extends BaseSocialMediaService
             Log::error('LinkedInService: Error deleting post', [
                 'error'   => $e->getMessage(),
                 'post_id' => $post->id,
+                'trace'   => $e->getTraceAsString()
             ]);
             return false;
         }
