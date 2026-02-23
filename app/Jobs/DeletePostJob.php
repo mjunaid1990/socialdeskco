@@ -19,31 +19,30 @@ class DeletePostJob implements ShouldQueue
     public $tries = 3;
     public $backoff = 10;
 
-    private $postId;
+    private $postData;
     private $accountId;
 
-    public function __construct(int $postId, int $accountId)
+    public function __construct(array $postData, int $accountId)
     {
-        $this->postId = $postId;
+        $this->postData = $postData;
         $this->accountId = $accountId;
     }
 
     public function handle(SocialMediaService $socialMediaService)
     {
         try {
-            // Retrieve fresh models
-            $post = Post::find($this->postId);
+            // Retrieve social account
             $account = SocialAccount::find($this->accountId);
-
-            if (!$post) {
-                Log::error("DeletePostJob: Post not found", ['post_id' => $this->postId]);
-                return;
-            }
 
             if (!$account) {
                 Log::error("DeletePostJob: Social account not found", ['account_id' => $this->accountId]);
                 return;
             }
+
+            // Create a temporary post object with the necessary data
+            $post = new Post();
+            $post->id = $this->postData['id'];
+            $post->platform_specific_data = $this->postData['platform_specific_data'];
 
             Log::info("DeletePostJob: Starting deletion for post {$post->id} on platform {$account->platform}");
             Log::info("DeletePostJob: Post platform_specific_data", ['data' => $post->platform_specific_data]);
@@ -57,7 +56,7 @@ class DeletePostJob implements ShouldQueue
                 Log::warning("DeletePostJob: Failed to delete post {$post->id} from {$account->platform}");
             }
         } catch (\Exception $e) {
-            Log::error("DeletePostJob: Exception deleting post {$this->postId}", [
+            Log::error("DeletePostJob: Exception deleting post {$this->postData['id']}", [
                 'platform' => $this->accountId,
                 'account_id' => $this->accountId,
                 'error' => $e->getMessage(),

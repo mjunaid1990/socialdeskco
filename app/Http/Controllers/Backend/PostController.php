@@ -381,14 +381,21 @@ class PostController extends Controller
         // Delete from all connected social media platforms if published
         if ($post->status === 'published') {
             $socialAccounts = $post->socialAccounts;
+            
+            // Store post data needed for deletion before deleting the post
+            $postData = [
+                'id' => $post->id,
+                'platform_specific_data' => $post->platform_specific_data,
+            ];
+            
             foreach ($socialAccounts as $account) {
-                // Dispatch delete job for each platform with IDs instead of models
-                DeletePostJob::dispatch($post->id, $account->id);
+                // Dispatch delete job for each platform with post data
+                DeletePostJob::dispatch($postData, $account->id);
                 Log::info("DeletePostJob dispatched for post {$post->id} from {$account->platform}");
             }
         }
         
-        // Delete from local database
+        // Delete from local database AFTER dispatching jobs
         $post->delete();
 
         return redirect()->route('admin.posts.index')->with('success', 'Post deleted successfully. Social media deletion is processing in the background.');
