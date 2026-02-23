@@ -93,7 +93,10 @@ class LinkedInService extends BaseSocialMediaService
                     'linkedin_post_id' => $postId,
                 ]);
 
-                return $responseData;
+                // Return the correct structure for SocialMediaService to detect success
+                return [
+                    'post_id' => $postId
+                ];
             } else {
                 Log::error('LinkedIn post failed', [
                     'response'    => $response->json(),
