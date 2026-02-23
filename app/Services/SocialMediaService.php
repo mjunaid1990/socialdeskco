@@ -54,6 +54,11 @@ class SocialMediaService
                     // Platform service returned response data with ID (like X API response)
                     $successCount++;
                     Log::info('SocialMediaService: Successfully published to ' . $account->platform . ' (ID: ' . $account->id . ') with response ID: ' . $result['data']['id']);
+                } elseif (is_array($result) && (isset($result['post_id']) || isset($result['id']))) {
+                    // Platform service returned array with post_id (like LinkedIn API response)
+                    $successCount++;
+                    $postId = $result['post_id'] ?? $result['id'] ?? 'unknown';
+                    Log::info('SocialMediaService: Successfully published to ' . $account->platform . ' (ID: ' . $account->id . ') with post ID: ' . $postId);
                 } else {
                     // Platform service returned false for failure
                     $failureCount++;
