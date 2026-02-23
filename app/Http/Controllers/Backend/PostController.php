@@ -382,8 +382,8 @@ class PostController extends Controller
         if ($post->status === 'published') {
             $socialAccounts = $post->socialAccounts;
             foreach ($socialAccounts as $account) {
-                // Dispatch delete job for each platform
-                DeletePostJob::dispatch($post, $account);
+                // Dispatch delete job for each platform with IDs instead of models
+                DeletePostJob::dispatch($post->id, $account->id);
                 Log::info("DeletePostJob dispatched for post {$post->id} from {$account->platform}");
             }
         }
