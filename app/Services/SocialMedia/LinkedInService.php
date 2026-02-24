@@ -137,50 +137,43 @@ class LinkedInService extends BaseSocialMediaService
     private function uploadMediaToLinkedIn(string $mediaUrl, SocialAccount $account, bool $isVideo = false): ?string
     {
         try {
-            $recipe = $isVideo
-                ? 'urn:li:digitalmediaRecipe:feedshare-video'
-                : 'urn:li:digitalmediaRecipe:feedshare-image';
-
-            $registerPayload = [
-                'registerUploadRequest' => [
-                    'recipes'              => [$recipe],
-                    'owner'                => "urn:li:person:{$account->account_id}",
-                    'serviceRelationships' => [
-                        [
-                            'relationshipType' => 'OWNER',
-                            'identifier'       => 'urn:li:userGeneratedContent',
-                        ],
-                    ],
+            // Use the new Images API instead of Assets API
+            $initializePayload = [
+                'initializeUploadRequest' => [
+                    'owner' => "urn:li:person:{$account->account_id}",
                 ],
             ];
 
-            $registerResponse = $this->makeApiRequest('post',
-                'https://api.linkedin.com/v2/assets?action=registerUpload',
-                $registerPayload,
-                [
-                    'Authorization'             => 'Bearer ' . $this->getAccessToken($account),
-                    'X-Restli-Protocol-Version' => '2.0.0',
-                    'Content-Type'              => 'application/json',
-                ]
-            );
+            $initializeResponse = Http::withHeaders([
+                'Authorization'             => 'Bearer ' . $this->getAccessToken($account),
+                'X-Restli-Protocol-Version' => '2.0.0',
+                'Content-Type'              => 'application/json',
+                'LinkedIn-Version'           => '202602',
+            ])->post('https://api.linkedin.com/rest/images?action=initializeUpload', $initializePayload);
 
-            if (!$registerResponse->successful()) {
-                Log::error('LinkedInService: Failed to register media upload', [
-                    'response'    => $registerResponse->json(),
-                    'status_code' => $registerResponse->status(),
+            if (!$initializeResponse->successful()) {
+                Log::error('LinkedInService: Failed to initialize image upload', [
+                    'response'    => $initializeResponse->json(),
+                    'status_code' => $initializeResponse->status(),
                 ]);
                 return null;
             }
 
-            $registerData = $registerResponse->json();
-            $uploadUrl    = $registerData['value']['uploadMechanism']['com.linkedin.digitalmedia.uploading.MediaUploadHttpRequest']['uploadUrl'] ?? null;
-            $imageAsset   = $registerData['value']['asset'] ?? null;
+            $initializeData = $initializeResponse->json();
+            $uploadUrl = $initializeData['value']['uploadUrl'] ?? null;
+            $imageUrn   = $initializeData['value']['image'] ?? null;
 
-            if (!$uploadUrl || !$imageAsset) {
-                Log::error('LinkedInService: Invalid register upload response', ['response' => $registerData]);
+            if (!$uploadUrl || !$imageUrn) {
+                Log::error('LinkedInService: Invalid initialize upload response', ['response' => $initializeData]);
                 return null;
             }
 
+            Log::info('LinkedInService: Initialized image upload', [
+                'image_urn' => $imageUrn,
+                'upload_url' => $uploadUrl,
+            ]);
+
+            // Download and upload the image
             $mediaContent = @file_get_contents($mediaUrl);
             if ($mediaContent === false) {
                 Log::error('LinkedInService: Failed to download media', ['media_url' => $mediaUrl]);
@@ -191,90 +184,34 @@ class LinkedInService extends BaseSocialMediaService
             $mimeTypes = [
                 'jpg' => 'image/jpeg', 'jpeg' => 'image/jpeg',
                 'png' => 'image/png',  'gif'  => 'image/gif',
-                'mp4' => 'video/mp4',  'mov'  => 'video/quicktime',
             ];
-            $mimeType = $mimeTypes[$fileExtension] ?? ($isVideo ? 'video/mp4' : 'image/jpeg');
-
-            $tempFile = tempnam(sys_get_temp_dir(), 'linkedin_upload_');
-            file_put_contents($tempFile, $mediaContent);
+            $mimeType = $mimeTypes[$fileExtension] ?? 'image/jpeg';
 
             $uploadResponse = Http::attach(
                 'file',
-                file_get_contents($tempFile),
+                $mediaContent,
                 basename($mediaUrl),
                 ['Content-Type' => $mimeType]
-            )->withHeaders([
-                'Authorization' => 'Bearer ' . $this->getAccessToken($account),
-            ])->post($uploadUrl);
-
-            @unlink($tempFile);
+            )->put($uploadUrl);
 
             if (!$uploadResponse->successful()) {
-                Log::error('LinkedInService: Failed to upload media to LinkedIn', [
+                Log::error('LinkedInService: Failed to upload image to LinkedIn', [
                     'status_code' => $uploadResponse->status(),
                     'response' => $uploadResponse->body(),
                 ]);
                 return null;
             }
 
-            // Wait for media to be processed and check status
-            return $this->waitForMediaProcessing($imageAsset, $account);
+            Log::info('LinkedInService: Image uploaded successfully', ['image_urn' => $imageUrn]);
+            return $imageUrn;
         } catch (\Exception $e) {
             Log::error('LinkedInService: Error uploading media', [
                 'error'     => $e->getMessage(),
                 'media_url' => $mediaUrl,
+                'trace'     => $e->getTraceAsString()
             ]);
             return null;
         }
-    }
-
-    private function waitForMediaProcessing(string $mediaAsset, SocialAccount $account, int $maxAttempts = 15): ?string
-    {
-        for ($attempt = 1; $attempt <= $maxAttempts; $attempt++) {
-            // Check media status
-            $statusResponse = Http::withHeaders([
-                'Authorization'             => 'Bearer ' . $this->getAccessToken($account),
-                'X-Restli-Protocol-Version' => '2.0.0',
-            ])->get("https://api.linkedin.com/v2/assets/{$mediaAsset}");
-
-            Log::info('LinkedInService: Media status check attempt', [
-                'attempt' => $attempt,
-                'media_asset' => $mediaAsset,
-                'response_status' => $statusResponse->status(),
-            ]);
-
-            if ($statusResponse->successful()) {
-                $statusData = $statusResponse->json();
-                $status = $statusData['recipes'][0]['status'] ?? 'UNKNOWN';
-
-                Log::info('LinkedInService: Media processing status', [
-                    'attempt' => $attempt,
-                    'status' => $status,
-                    'media_asset' => $mediaAsset,
-                ]);
-
-                if ($status === 'READY') {
-                    Log::info('LinkedInService: Media is ready for use', ['media_asset' => $mediaAsset]);
-                    return $mediaAsset;
-                } elseif ($status === 'FAILED') {
-                    Log::error('LinkedInService: Media processing failed', ['media_asset' => $mediaAsset]);
-                    return null;
-                }
-            }
-
-            // Wait before next attempt (2 seconds)
-            if ($attempt < $maxAttempts) {
-                sleep(2);
-            }
-        }
-
-        Log::warning('LinkedInService: Media processing timeout, but trying to use asset anyway', [
-            'media_asset' => $mediaAsset,
-            'max_attempts' => $maxAttempts,
-        ]);
-        
-        // Return the asset anyway - LinkedIn might accept it even if not fully processed
-        return $mediaAsset;
     }
 
     public function deletePost(Post $post, SocialAccount $account)
