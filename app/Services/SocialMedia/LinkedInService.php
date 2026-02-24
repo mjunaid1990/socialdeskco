@@ -47,18 +47,21 @@ class LinkedInService extends BaseSocialMediaService
 
                 $mediaUrn = $this->uploadMediaToLinkedIn($mediaUrl, $account, $isVideo);
 
-                if ($mediaUrn && strpos($mediaUrn, 'digitalmediaAsset') === false) {
+                if ($mediaUrn) {
                     $payload['content'] = [
                         'media' => [
                             'id'    => $mediaUrn,
                             'title' => $post->title ?? ($isVideo ? 'Shared Video' : 'Shared Image'),
                         ],
                     ];
-                } else {
-                    Log::warning('LinkedInService: Media not ready or wrong URN type, posting as text-only', [
-                        'post_id'   => $post->id,
-                        'media_url' => $mediaUrl,
+                    Log::info('LinkedInService: Using media asset in post', [
+                        'post_id' => $post->id,
                         'media_urn' => $mediaUrn,
+                    ]);
+                } else {
+                    Log::warning('LinkedInService: No media asset available, posting as text-only', [
+                        'post_id' => $post->id,
+                        'media_url' => $mediaUrl,
                     ]);
                 }
             }
@@ -225,7 +228,7 @@ class LinkedInService extends BaseSocialMediaService
         }
     }
 
-    private function waitForMediaProcessing(string $mediaAsset, SocialAccount $account, int $maxAttempts = 10): ?string
+    private function waitForMediaProcessing(string $mediaAsset, SocialAccount $account, int $maxAttempts = 15): ?string
     {
         for ($attempt = 1; $attempt <= $maxAttempts; $attempt++) {
             // Check media status
@@ -233,6 +236,12 @@ class LinkedInService extends BaseSocialMediaService
                 'Authorization'             => 'Bearer ' . $this->getAccessToken($account),
                 'X-Restli-Protocol-Version' => '2.0.0',
             ])->get("https://api.linkedin.com/v2/assets/{$mediaAsset}");
+
+            Log::info('LinkedInService: Media status check attempt', [
+                'attempt' => $attempt,
+                'media_asset' => $mediaAsset,
+                'response_status' => $statusResponse->status(),
+            ]);
 
             if ($statusResponse->successful()) {
                 $statusData = $statusResponse->json();
@@ -259,11 +268,13 @@ class LinkedInService extends BaseSocialMediaService
             }
         }
 
-        Log::warning('LinkedInService: Media processing timeout', [
+        Log::warning('LinkedInService: Media processing timeout, but trying to use asset anyway', [
             'media_asset' => $mediaAsset,
             'max_attempts' => $maxAttempts,
         ]);
-        return null;
+        
+        // Return the asset anyway - LinkedIn might accept it even if not fully processed
+        return $mediaAsset;
     }
 
     public function deletePost(Post $post, SocialAccount $account)
