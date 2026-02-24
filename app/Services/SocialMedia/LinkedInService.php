@@ -137,73 +137,11 @@ class LinkedInService extends BaseSocialMediaService
     private function uploadMediaToLinkedIn(string $mediaUrl, SocialAccount $account, bool $isVideo = false): ?string
     {
         try {
-            // Use the new Images API instead of Assets API
-            $initializePayload = [
-                'initializeUploadRequest' => [
-                    'owner' => "urn:li:person:{$account->account_id}",
-                ],
-            ];
-
-            $initializeResponse = Http::withHeaders([
-                'Authorization'             => 'Bearer ' . $this->getAccessToken($account),
-                'X-Restli-Protocol-Version' => '2.0.0',
-                'Content-Type'              => 'application/json',
-                'LinkedIn-Version'           => '202602',
-            ])->post('https://api.linkedin.com/rest/images?action=initializeUpload', $initializePayload);
-
-            if (!$initializeResponse->successful()) {
-                Log::error('LinkedInService: Failed to initialize image upload', [
-                    'response'    => $initializeResponse->json(),
-                    'status_code' => $initializeResponse->status(),
-                ]);
-                return null;
+            if ($isVideo) {
+                return $this->uploadVideoToLinkedIn($mediaUrl, $account);
+            } else {
+                return $this->uploadImageToLinkedIn($mediaUrl, $account);
             }
-
-            $initializeData = $initializeResponse->json();
-            $uploadUrl = $initializeData['value']['uploadUrl'] ?? null;
-            $imageUrn   = $initializeData['value']['image'] ?? null;
-
-            if (!$uploadUrl || !$imageUrn) {
-                Log::error('LinkedInService: Invalid initialize upload response', ['response' => $initializeData]);
-                return null;
-            }
-
-            Log::info('LinkedInService: Initialized image upload', [
-                'image_urn' => $imageUrn,
-                'upload_url' => $uploadUrl,
-            ]);
-
-            // Download and upload the image
-            $mediaContent = @file_get_contents($mediaUrl);
-            if ($mediaContent === false) {
-                Log::error('LinkedInService: Failed to download media', ['media_url' => $mediaUrl]);
-                return null;
-            }
-
-            $fileExtension = strtolower(pathinfo($mediaUrl, PATHINFO_EXTENSION));
-            $mimeTypes = [
-                'jpg' => 'image/jpeg', 'jpeg' => 'image/jpeg',
-                'png' => 'image/png',  'gif'  => 'image/gif',
-            ];
-            $mimeType = $mimeTypes[$fileExtension] ?? 'image/jpeg';
-
-            $uploadResponse = Http::attach(
-                'file',
-                $mediaContent,
-                basename($mediaUrl),
-                ['Content-Type' => $mimeType]
-            )->put($uploadUrl);
-
-            if (!$uploadResponse->successful()) {
-                Log::error('LinkedInService: Failed to upload image to LinkedIn', [
-                    'status_code' => $uploadResponse->status(),
-                    'response' => $uploadResponse->body(),
-                ]);
-                return null;
-            }
-
-            Log::info('LinkedInService: Image uploaded successfully', ['image_urn' => $imageUrn]);
-            return $imageUrn;
         } catch (\Exception $e) {
             Log::error('LinkedInService: Error uploading media', [
                 'error'     => $e->getMessage(),
@@ -212,6 +150,156 @@ class LinkedInService extends BaseSocialMediaService
             ]);
             return null;
         }
+    }
+
+    private function uploadImageToLinkedIn(string $mediaUrl, SocialAccount $account): ?string
+    {
+        // Use new Images API instead of Assets API
+        $initializePayload = [
+            'initializeUploadRequest' => [
+                'owner' => "urn:li:person:{$account->account_id}",
+            ],
+        ];
+
+        $initializeResponse = Http::withHeaders([
+            'Authorization'             => 'Bearer ' . $this->getAccessToken($account),
+            'X-Restli-Protocol-Version' => '2.0.0',
+            'Content-Type'              => 'application/json',
+            'LinkedIn-Version'           => '202602',
+        ])->post('https://api.linkedin.com/rest/images?action=initializeUpload', $initializePayload);
+
+        if (!$initializeResponse->successful()) {
+            Log::error('LinkedInService: Failed to initialize image upload', [
+                'response'    => $initializeResponse->json(),
+                'status_code' => $initializeResponse->status(),
+            ]);
+            return null;
+        }
+
+        $initializeData = $initializeResponse->json();
+        $uploadUrl = $initializeData['value']['uploadUrl'] ?? null;
+        $imageUrn   = $initializeData['value']['image'] ?? null;
+
+        if (!$uploadUrl || !$imageUrn) {
+            Log::error('LinkedInService: Invalid initialize upload response', ['response' => $initializeData]);
+            return null;
+        }
+
+        Log::info('LinkedInService: Initialized image upload', [
+            'image_urn' => $imageUrn,
+            'upload_url' => $uploadUrl,
+        ]);
+
+        // Download and upload image
+        $mediaContent = @file_get_contents($mediaUrl);
+        if ($mediaContent === false) {
+            Log::error('LinkedInService: Failed to download media', ['media_url' => $mediaUrl]);
+            return null;
+        }
+
+        $fileExtension = strtolower(pathinfo($mediaUrl, PATHINFO_EXTENSION));
+        $mimeTypes = [
+            'jpg' => 'image/jpeg', 'jpeg' => 'image/jpeg',
+            'png' => 'image/png',  'gif'  => 'image/gif',
+        ];
+        $mimeType = $mimeTypes[$fileExtension] ?? 'image/jpeg';
+
+        $uploadResponse = Http::attach(
+            'file',
+            $mediaContent,
+            basename($mediaUrl),
+            ['Content-Type' => $mimeType]
+        )->put($uploadUrl);
+
+        if (!$uploadResponse->successful()) {
+            Log::error('LinkedInService: Failed to upload image to LinkedIn', [
+                'status_code' => $uploadResponse->status(),
+                'response' => $uploadResponse->body(),
+            ]);
+            return null;
+        }
+
+        Log::info('LinkedInService: Image uploaded successfully', ['image_urn' => $imageUrn]);
+        return $imageUrn;
+    }
+
+    private function uploadVideoToLinkedIn(string $mediaUrl, SocialAccount $account): ?string
+    {
+        // Get file size for video upload
+        $mediaContent = @file_get_contents($mediaUrl);
+        if ($mediaContent === false) {
+            Log::error('LinkedInService: Failed to download video', ['media_url' => $mediaUrl]);
+            return null;
+        }
+
+        $fileSizeBytes = strlen($mediaContent);
+
+        // Initialize video upload
+        $initializePayload = [
+            'initializeUploadRequest' => [
+                'owner'            => "urn:li:person:{$account->account_id}",
+                'fileSizeBytes'    => $fileSizeBytes,
+                'uploadCaptions'   => false,
+                'uploadThumbnail'  => false,
+            ],
+        ];
+
+        $initializeResponse = Http::withHeaders([
+            'Authorization'             => 'Bearer ' . $this->getAccessToken($account),
+            'X-Restli-Protocol-Version' => '2.0.0',
+            'Content-Type'              => 'application/json',
+            'LinkedIn-Version'           => '202602',
+        ])->post('https://api.linkedin.com/rest/videos?action=initializeUpload', $initializePayload);
+
+        if (!$initializeResponse->successful()) {
+            Log::error('LinkedInService: Failed to initialize video upload', [
+                'response'    => $initializeResponse->json(),
+                'status_code' => $initializeResponse->status(),
+            ]);
+            return null;
+        }
+
+        $initializeData = $initializeResponse->json();
+        $videoUrn = $initializeData['value']['video'] ?? null;
+        $uploadInstructions = $initializeData['value']['uploadInstructions'][0] ?? null;
+        $uploadUrl = $uploadInstructions['uploadUrl'] ?? null;
+
+        if (!$videoUrn || !$uploadUrl) {
+            Log::error('LinkedInService: Invalid initialize video upload response', ['response' => $initializeData]);
+            return null;
+        }
+
+        Log::info('LinkedInService: Initialized video upload', [
+            'video_urn' => $videoUrn,
+            'upload_url' => $uploadUrl,
+            'file_size_bytes' => $fileSizeBytes,
+        ]);
+
+        // Upload video file
+        $fileExtension = strtolower(pathinfo($mediaUrl, PATHINFO_EXTENSION));
+        $mimeTypes = [
+            'mp4' => 'video/mp4', 'mov' => 'video/quicktime',
+            'avi' => 'video/x-msvideo', 'mkv' => 'video/x-matroska',
+        ];
+        $mimeType = $mimeTypes[$fileExtension] ?? 'video/mp4';
+
+        $uploadResponse = Http::attach(
+            'file',
+            $mediaContent,
+            basename($mediaUrl),
+            ['Content-Type' => $mimeType]
+        )->put($uploadUrl);
+
+        if (!$uploadResponse->successful()) {
+            Log::error('LinkedInService: Failed to upload video to LinkedIn', [
+                'status_code' => $uploadResponse->status(),
+                'response' => $uploadResponse->body(),
+            ]);
+            return null;
+        }
+
+        Log::info('LinkedInService: Video uploaded successfully', ['video_urn' => $videoUrn]);
+        return $videoUrn;
     }
 
     public function deletePost(Post $post, SocialAccount $account)
