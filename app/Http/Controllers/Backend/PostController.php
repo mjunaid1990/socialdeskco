@@ -10,6 +10,7 @@ use App\Jobs\PublishPostJob;
 use App\Jobs\DeletePostJob;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 
@@ -95,6 +96,19 @@ class PostController extends Controller
             'tiktok_settings.disable_comments' => 'boolean|nullable',
             'other_platform_settings' => 'nullable|array',
         ]);
+
+        // Verify user owns all selected social accounts
+        $userSocialAccountIds = SocialAccount::where('user_id', Auth::id())->pluck('id')->toArray();
+        $selectedAccountIds = $request->platforms;
+        
+        foreach ($selectedAccountIds as $accountId) {
+            if (!in_array($accountId, $userSocialAccountIds)) {
+                Log::warning("User " . Auth::id() . " attempted to use social account {$accountId} they don't own");
+                return redirect()->back()
+                    ->withInput()
+                    ->with('error', 'You do not have access to one or more selected social accounts.');
+            }
+        }
 
         Log::info('Validation passed, proceeding with post creation');
 
@@ -289,11 +303,10 @@ class PostController extends Controller
         $request->validate([
             'title' => 'required|string|max:255',
             'content' => 'required|string',
-            'social_account_id' => 'required|exists:social_accounts,id',
             'status' => 'required|in:draft,scheduled,published',
             'scheduled_at' => 'nullable|date',
             'media' => 'nullable|array',
-            'media.*' => 'file|max:10240', // Simplified validation for debugging
+            'media.*' => 'file|max:10240',
             'facebook_settings' => 'nullable|array',
             'instagram_settings' => 'nullable|array',
             'x_settings' => 'nullable|array',
@@ -311,7 +324,7 @@ class PostController extends Controller
             'other_platform_settings' => 'nullable|array',
         ]);
 
-        $post->social_account_id = $request->social_account_id;
+        // Note: social_account_id is kept for backward compatibility but not updated
         $post->title = $request->title;
         $post->content = $request->content;
         $post->status = $request->status;
@@ -377,28 +390,44 @@ class PostController extends Controller
         if ($post->user_id !== Auth::id() && !Auth::user()->isAdmin()) {
             abort(403, 'Unauthorized access');
         }
-        
-        // Delete from all connected social media platforms if published
-        if ($post->status === 'published') {
-            $socialAccounts = $post->socialAccounts;
-            
-            // Store post data needed for deletion before deleting the post
-            $postData = [
-                'id' => $post->id,
-                'platform_specific_data' => $post->platform_specific_data,
-            ];
-            
-            foreach ($socialAccounts as $account) {
-                // Dispatch delete job for each platform with post data
-                DeletePostJob::dispatch($postData, $account->id);
-                Log::info("DeletePostJob dispatched for post {$post->id} from {$account->platform}");
-            }
-        }
-        
-        // Delete from local database AFTER dispatching jobs
-        $post->delete();
 
-        return redirect()->route('admin.posts.index')->with('success', 'Post deleted successfully. Social media deletion is processing in the background.');
+        try {
+            // Use transaction to ensure data consistency
+            DB::transaction(function () use ($post) {
+                // Prevent deletion of posts currently being processed
+                if ($post->status === 'processing') {
+                    throw new \Exception('Cannot delete a post that is currently being processed. Please try again shortly.');
+                }
+                
+                // Update post status to deleting before dispatching jobs
+                $post->update(['status' => 'deleting']);
+                
+                // Delete from all connected social media platforms if published
+                if ($post->status === 'published') {
+                    $socialAccounts = $post->socialAccounts;
+                    foreach ($socialAccounts as $account) {
+                        // Dispatch delete job for each platform
+                        DeletePostJob::dispatch($post, $account);
+                        Log::info("DeletePostJob dispatched for post {$post->id} from {$account->platform}");
+                    }
+                }
+                
+                // Delete post and all related data (cascade deletes via FK constraints)
+                $post->delete();
+                Log::info("Post {$post->id} deleted successfully by user " . Auth::id());
+            });
+
+            return redirect()->route('admin.posts.index')
+                ->with('success', 'Post deleted successfully. Social media deletion is processing in the background.');
+        } catch (\Exception $e) {
+            Log::error("Error deleting post {$post->id}: " . $e->getMessage(), [
+                'user_id' => Auth::id(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            
+            return redirect()->route('admin.posts.index')
+                ->with('error', $e->getMessage() ?: 'Failed to delete post. Please try again.');
+        }
     }
 
     /**

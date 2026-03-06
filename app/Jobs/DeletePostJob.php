@@ -19,46 +19,34 @@ class DeletePostJob implements ShouldQueue
     public $tries = 3;
     public $backoff = 10;
 
-    private $postData;
-    private $accountId;
+    protected $post;
+    protected $account;
 
-    public function __construct(array $postData, int $accountId)
+    public function __construct(Post $post, SocialAccount $account)
     {
-        $this->postData = $postData;
-        $this->accountId = $accountId;
+        $this->post = $post;
+        $this->account = $account;
     }
 
     public function handle(SocialMediaService $socialMediaService)
     {
         try {
-            // Retrieve social account
-            $account = SocialAccount::find($this->accountId);
+            Log::info("DeletePostJob: Starting deletion for post {$this->post->id} on platform {$this->account->platform}");
 
-            if (!$account) {
-                Log::error("DeletePostJob: Social account not found", ['account_id' => $this->accountId]);
-                return;
-            }
-
-            // Create a temporary post object with the necessary data
-            $post = new Post();
-            $post->id = $this->postData['id'];
-            $post->platform_specific_data = $this->postData['platform_specific_data'];
-
-            Log::info("DeletePostJob: Starting deletion for post {$post->id} on platform {$account->platform}");
-            Log::info("DeletePostJob: Post platform_specific_data", ['data' => $post->platform_specific_data]);
-
-            $result = $socialMediaService->deletePost($post, $account);
-            Log::info("DeletePostJob: SocialMediaService deletePost returned", ['result' => $result]);
+            $result = $socialMediaService->deletePost($this->post, $this->account);
 
             if ($result) {
-                Log::info("DeletePostJob: Successfully deleted post {$post->id} from {$account->platform}");
+                Log::info("DeletePostJob: Successfully deleted post {$this->post->id} from {$this->account->platform}");
+                return true;
             } else {
-                Log::warning("DeletePostJob: Failed to delete post {$post->id} from {$account->platform}");
+                Log::warning("DeletePostJob: Failed to delete post {$this->post->id} from {$this->account->platform}");
+                // Throw exception to trigger retry
+                throw new \Exception("Failed to delete post from {$this->account->platform}");
             }
         } catch (\Exception $e) {
-            Log::error("DeletePostJob: Exception deleting post {$this->postData['id']}", [
-                'platform' => $this->accountId,
-                'account_id' => $this->accountId,
+            Log::error("DeletePostJob: Exception deleting post {$this->post->id}", [
+                'platform' => $this->account->platform,
+                'account_id' => $this->account->id,
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString(),
             ]);
@@ -69,8 +57,10 @@ class DeletePostJob implements ShouldQueue
 
     public function failed(\Throwable $exception = null)
     {
-        Log::error("DeletePostJob failed for post {$this->post->id} on {$this->account->platform}", [
+        Log::error("DeletePostJob failed for post {$this->post->id} on {$this->account->platform} after all retries", [
+            'account_id' => $this->account->id,
             'error' => $exception?->getMessage(),
+            'trace' => $exception?->getTraceAsString(),
         ]);
     }
 }
