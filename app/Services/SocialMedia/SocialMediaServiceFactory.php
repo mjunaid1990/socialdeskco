@@ -12,18 +12,8 @@ class SocialMediaServiceFactory
         'instagram' => InstagramService::class,
         'x' => XService::class,
         'linkedin' => LinkedInService::class,
-        'whatsapp' => WhatsAppService::class,
         'tiktok' => TikTokService::class,
         'youtube' => YouTubeService::class,
-        'pinterest' => PinterestService::class,
-        'snapchat' => SnapchatService::class,
-        'reddit' => RedditService::class,
-        'telegram' => TelegramService::class,
-        'discord' => DiscordService::class,
-        'tumblr' => TumblrService::class,
-        'flickr' => FlickrService::class,
-        'vimeo' => VimeoService::class,
-        'twitch' => TwitchService::class,
     ];
 
     public static function create(string $platform): SocialMediaPlatformInterface

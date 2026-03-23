@@ -23,7 +23,10 @@ class LinkedInService extends BaseSocialMediaService
             return $existingData;
         }
         try {
-            $authorUrn = "urn:li:person:{$account->account_id}";
+            // Check if account_id is already a URN (as updated in OAuthController)
+            $authorUrn = str_starts_with($account->account_id, 'urn:li:') 
+                ? $account->account_id 
+                : "urn:li:person:{$account->account_id}";
 
             $payload = [
                 'author'          => $authorUrn,
@@ -154,10 +157,14 @@ class LinkedInService extends BaseSocialMediaService
 
     private function uploadImageToLinkedIn(string $mediaUrl, SocialAccount $account): ?string
     {
+        $ownerUrn = str_starts_with($account->account_id, 'urn:li:') 
+            ? $account->account_id 
+            : "urn:li:person:{$account->account_id}";
+
         // Use new Images API instead of Assets API
         $initializePayload = [
             'initializeUploadRequest' => [
-                'owner' => "urn:li:person:{$account->account_id}",
+                'owner' => $ownerUrn,
             ],
         ];
 
@@ -225,6 +232,10 @@ class LinkedInService extends BaseSocialMediaService
 
     private function uploadVideoToLinkedIn(string $mediaUrl, SocialAccount $account): ?string
     {
+        $ownerUrn = str_starts_with($account->account_id, 'urn:li:') 
+            ? $account->account_id 
+            : "urn:li:person:{$account->account_id}";
+
         // Get file size for video upload
         $mediaContent = @file_get_contents($mediaUrl);
         if ($mediaContent === false) {
@@ -237,7 +248,7 @@ class LinkedInService extends BaseSocialMediaService
         // Initialize video upload
         $initializePayload = [
             'initializeUploadRequest' => [
-                'owner'            => "urn:li:person:{$account->account_id}",
+                'owner'            => $ownerUrn,
                 'fileSizeBytes'    => $fileSizeBytes,
                 'uploadCaptions'   => false,
                 'uploadThumbnail'  => false,

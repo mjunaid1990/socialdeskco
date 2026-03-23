@@ -597,6 +597,6 @@ class SettingsHelper
      */
     public static function getSocialMediaPlatformGroups(): array
     {
-        return ['facebook', 'instagram', 'linkedin', 'x', 'whatsapp', 'tiktok', 'youtube', 'snapchat', 'pinterest', 'reddit', 'telegram', 'discord', 'tumblr', 'flickr', 'vimeo', 'twitch'];
+        return ['facebook', 'instagram', 'linkedin', 'x', 'tiktok', 'youtube'];
     }
 }

@@ -492,6 +492,8 @@ openid
 profile
 email
 w_member_social
+w_organization_social
+rw_organization_admin
 ```
 
 ### 📍 API Endpoints
@@ -505,51 +507,37 @@ Content-Type: application/json
 LinkedIn-Version: 202602
 
 {
-  "author": "urn:li:person:{PERSON_ID}",
+  "author": "urn:li:person:{PERSON_ID}" or "urn:li:organization:{ORG_ID}",
   "commentary": "Your post content here #hashtag",
   "visibility": "PUBLIC",
   "lifecycleState": "PUBLISHED",
   "isReshareDisabledByAuthor": false
 }
-
-Response Headers:
-  x-restli-id: "post_urn_id"
-
-Response: {
-  "created": 1234567890,
-  "...": "..."
-}
 ```
 
 #### Post with Image
 
-**Step 1: Register Asset Upload**
+**Step 1: Initialize Image Upload**
 ```
-POST /assets?action=registerUpload
+POST /rest/images?action=initializeUpload
 Authorization: Bearer {ACCESS_TOKEN}
 X-Restli-Protocol-Version: 2.0.0
 Content-Type: application/json
+LinkedIn-Version: 202602
 
 {
-  "registerUploadRequest": {
-    "recipes": ["urn:li:digitalmediaRecipe:feedshare-image"],
-    "owner": "urn:li:person:{PERSON_ID}",
-    "serviceRelationships": [
-      {
-        "relationshipType": "OWNER",
-        "identifier": "urn:li:userGeneratedContent"
-      }
-    ]
+  "initializeUploadRequest": {
+    "owner": "urn:li:person:{PERSON_ID}" or "urn:li:organization:{ORG_ID}"
   }
 }
+```
 
-Response: {
+Response:
+```json
+{
   "value": {
-    "mediaUploadHttpRequest": {
-      "uploadUrl": "https://upload.linkedin.com/...",
-      "httpMethod": "PUT"
-    },
-    "mediaAsset": "urn:li:digitalmediaAsset:..."
+    "uploadUrl": "https://api.linkedin.com/mediaUpload/...",
+    "image": "urn:li:image:..."
   }
 }
 ```
@@ -560,24 +548,22 @@ PUT {uploadUrl}
 Content-Type: image/jpeg
 
 [binary image data]
-
-Response: 204 No Content
 ```
 
 **Step 3: Create Post with Image**
 ```
-POST /posts
+POST /rest/posts
 Authorization: Bearer {ACCESS_TOKEN}
 X-Restli-Protocol-Version: 2.0.0
 Content-Type: application/json
 LinkedIn-Version: 202602
 
 {
-  "author": "urn:li:person:{PERSON_ID}",
+  "author": "urn:li:person:{PERSON_ID}" or "urn:li:organization:{ORG_ID}",
   "commentary": "Post with image",
   "content": {
     "media": {
-      "id": "urn:li:digitalmediaAsset:...",
+      "id": "urn:li:image:...",
       "title": "Image Title"
     }
   },
@@ -588,67 +574,62 @@ LinkedIn-Version: 202602
 
 #### Post with Video
 
-**Step 1: Register Video Upload**
+**Step 1: Initialize Video Upload**
 ```
-POST /videos?action=initializeUpload
-Authorization: Bearer {ACCESS_TOKEN}
-X-Restli-Protocol-Version: 2.0.0
-Content-Type: application/json
-
-{
-  "initializeUploadRequest": {
-    "owner": "urn:li:person:{PERSON_ID}",
-    "fileSizeBytes": 1024000,
-    "uploadCaptions": false
-  }
-}
-
-Response: {
-  "value": {
-    "video": "urn:li:video:{VIDEO_ID}",
-    "uploadToken": "upload_token",
-    "uploadUrl": "https://upload.linkedin.com/..."
-  }
-}
-```
-
-**Step 2: Upload Video File**
-```
-POST {uploadUrl}
-Content-Type: video/mp4
-
-[binary video data]
-```
-
-**Step 3: Finalize Upload**
-```
-POST /videos?action=finalizeUpload
-Authorization: Bearer {ACCESS_TOKEN}
-X-Restli-Protocol-Version: 2.0.0
-Content-Type: application/json
-
-{
-  "finalizeUploadRequest": {
-    "video": "urn:li:video:{VIDEO_ID}",
-    "uploadToken": "upload_token"
-  }
-}
-```
-
-**Step 4: Create Post with Video**
-```
-POST /posts
+POST /rest/videos?action=initializeUpload
 Authorization: Bearer {ACCESS_TOKEN}
 X-Restli-Protocol-Version: 2.0.0
 Content-Type: application/json
 LinkedIn-Version: 202602
 
 {
-  "author": "urn:li:person:{PERSON_ID}",
-  "commentary": "Check out this video!",
+  "initializeUploadRequest": {
+    "owner": "urn:li:person:{PERSON_ID}" or "urn:li:organization:{ORG_ID}",
+    "fileSizeBytes": 1234567,
+    "uploadCaptions": false,
+    "uploadThumbnail": false
+  }
+}
+```
+
+Response:
+```json
+{
+  "value": {
+    "video": "urn:li:video:...",
+    "uploadInstructions": [
+      {
+        "uploadUrl": "https://api.linkedin.com/mediaUpload/...",
+        "firstByte": 0,
+        "lastByte": 1234566
+      }
+    ]
+  }
+}
+```
+
+**Step 2: Upload Video**
+```
+PUT {uploadUrl}
+Content-Type: video/mp4
+
+[binary video data]
+```
+
+**Step 3: Create Post with Video**
+```
+POST /rest/posts
+Authorization: Bearer {ACCESS_TOKEN}
+X-Restli-Protocol-Version: 2.0.0
+Content-Type: application/json
+LinkedIn-Version: 202602
+
+{
+  "author": "urn:li:person:{PERSON_ID}" or "urn:li:organization:{ORG_ID}",
+  "commentary": "Post with video",
   "content": {
     "media": {
-      "id": "urn:li:video:{VIDEO_ID}",
+      "id": "urn:li:video:...",
       "title": "Video Title"
     }
   },
@@ -657,30 +638,22 @@ LinkedIn-Version: 202602
 }
 ```
 
-#### Post Deletion
+#### Organization Management (Pages)
+To fetch organizations managed by the user:
 ```
-DELETE /posts/{POST_ID}
+GET /rest/organizationalEntityAcls?q=roleAssignee
 Authorization: Bearer {ACCESS_TOKEN}
 X-Restli-Protocol-Version: 2.0.0
-
-Response: 204 No Content
 ```
 
-#### Get User Info
+To fetch organization details:
 ```
-GET /me?fields=id,localizedFirstName,localizedLastName,profilePicture(displayImage)
+GET /rest/organizations/{ID}
 Authorization: Bearer {ACCESS_TOKEN}
 X-Restli-Protocol-Version: 2.0.0
-
-Response: {
-  "localizedFirstName": "First",
-  "localizedLastName": "Last",
-  "id": "person_id",
-  "profilePicture": {
-    "displayImage": "urn:li:digitalmediaAsset:..."
-  }
-}
 ```
+
+---
 
 ### 💾 Data Storage
 - **Access Token**: Stored in `social_accounts.access_token`

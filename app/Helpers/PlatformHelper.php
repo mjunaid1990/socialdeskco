@@ -46,7 +46,6 @@ class PlatformHelper
             'instagram' => 'Instagram',
             'x' => 'X',
             'linkedin' => 'LinkedIn',
-            'whatsapp' => 'WhatsApp',
         ];
     }
 
@@ -60,9 +59,6 @@ class PlatformHelper
             'instagram' => 'Instagram Direct',
             'x' => 'X DMs',
             'linkedin' => 'LinkedIn Messages',
-            'whatsapp' => 'WhatsApp',
-            'telegram' => 'Telegram',
-            'discord' => 'Discord',
         ];
     }
 
@@ -77,9 +73,7 @@ class PlatformHelper
             'x' => 'X',
             'linkedin' => 'LinkedIn',
             'tiktok' => 'TikTok',
-            'pinterest' => 'Pinterest',
-            'reddit' => 'Reddit',
-            'tumblr' => 'Tumblr',
+            'youtube' => 'YouTube',
         ];
     }
 

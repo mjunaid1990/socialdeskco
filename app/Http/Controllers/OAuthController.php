@@ -89,7 +89,7 @@ class OAuthController extends Controller
                     'response_type' => 'code',
                     'client_id' => $clientId,
                     'redirect_uri' => $redirectUri,
-                    'scope' => 'openid profile email w_member_social',
+                    'scope' => 'openid profile email w_member_social w_organization_social r_organization_social rw_organization_admin',
                     'state' => $state,
                 ]);
 
@@ -196,17 +196,35 @@ class OAuthController extends Controller
             // Get user profile
             $profileData = $this->getUserProfile($platform, $tokenData['access_token']);
             
-            
+            // Handle LinkedIn differently because it can have multiple accounts (person + organizations)
+            if ($platform === 'linkedin') {
+                $accounts = is_array($profileData) && isset($profileData[0]) ? $profileData : [$profileData];
+                
+                foreach ($accounts as $profile) {
+                    SocialAccount::updateOrCreate(
+                        [
+                            'user_id' => Auth::id(),
+                            'platform' => $platform,
+                            'account_id' => $profile['id'],
+                        ],
+                        [
+                            'account_name' => $profile['name'] ?? $profile['username'] ?? 'Unknown',
+                            'access_token' => $tokenData['access_token'],
+                            'refresh_token' => $tokenData['refresh_token'] ?? null,
+                            'token_expires_at' => isset($tokenData['expires_in']) 
+                                ? now()->addSeconds($tokenData['expires_in']) 
+                                : null,
+                            'profile_data' => $profile,
+                            'is_active' => true,
+                            'last_sync_at' => now(),
+                        ]
+                    );
+                }
+                
+                return view('oauth-callback');
+            }
 
-            // Create or update social account
-            Log::info("Creating/Updating SocialAccount for TikTok", [
-                'user_id' => Auth::id(),
-                'platform' => $platform,
-                'profile_id' => $profileData['id'] ?? 'missing',
-                'profile_name' => $profileData['name'] ?? $profileData['username'] ?? 'Unknown',
-                'token_present' => !empty($tokenData['access_token'])
-            ]);
-
+            // Standard single-account logic for other platforms
             $socialAccount = SocialAccount::updateOrCreate(
                 [
                     'user_id' => Auth::id(),
@@ -471,7 +489,6 @@ class OAuthController extends Controller
                 break;
 
             case 'linkedin':
-
                 // Get basic profile information using LinkedIn v2 API
                 $response = $client->get("https://api.linkedin.com/v2/userinfo", [
                     'headers' => [
@@ -479,18 +496,71 @@ class OAuthController extends Controller
                     ],
                 ]);
                 
-                $profileData = json_decode($response->getBody()->getContents(), true);
+                $userData = json_decode($response->getBody()->getContents(), true);
+                $accounts = [];
 
-                // Format response based on v2 API structure
-                return [
-                    'id' => $profileData['sub'] ?? '',
-                    'name' => trim(($profileData['given_name'] ?? '') . ' ' . ($profileData['family_name'] ?? '')),
-                    'firstName' => $profileData['given_name'] ?? '',
-                    'lastName' => $profileData['family_name'] ?? '',
-                    'email' => $profileData['email'] ?? null,
-                    'profilePicture' => $profileData['picture'] ?? null,
-                    'raw' => $profileData
+                // Add the personal profile
+                $accounts[] = [
+                    'id' => "urn:li:person:" . ($userData['sub'] ?? ''),
+                    'name' => trim(($userData['given_name'] ?? '') . ' ' . ($userData['family_name'] ?? '')),
+                    'firstName' => $userData['given_name'] ?? '',
+                    'lastName' => $userData['family_name'] ?? '',
+                    'email' => $userData['email'] ?? null,
+                    'profilePicture' => $userData['picture'] ?? null,
+                    'type' => 'person',
+                    'raw' => $userData
                 ];
+
+                // Get organizations where the user is an admin
+                try {
+                    $orgAclResponse = $client->get("https://api.linkedin.com/rest/organizationalEntityAcls?q=roleAssignee", [
+                        'headers' => [
+                            'Authorization' => "Bearer $accessToken",
+                            'X-Restli-Protocol-Version' => '2.0.0',
+                            'LinkedIn-Version' => '202602'
+                        ],
+                    ]);
+
+                    $aclData = json_decode($orgAclResponse->getBody()->getContents(), true);
+                    
+                    foreach ($aclData['elements'] ?? [] as $acl) {
+                        $orgUrn = $acl['organizationalTarget'];
+                        $orgId = str_replace('urn:li:organization:', '', $orgUrn);
+                        
+                        // Fetch organization details
+                        $orgDetailsResponse = $client->get("https://api.linkedin.com/rest/organizations/" . urlencode($orgId), [
+                            'headers' => [
+                                'Authorization' => "Bearer $accessToken",
+                                'X-Restli-Protocol-Version' => '2.0.0',
+                                'LinkedIn-Version' => '202602'
+                            ],
+                        ]);
+
+                        if ($orgDetailsResponse->getStatusCode() === 200) {
+                            $orgData = json_decode($orgDetailsResponse->getBody()->getContents(), true);
+                            
+                            // Get organization name (multi-locale)
+                            $orgName = '';
+                            if (isset($orgData['localizedName'])) {
+                                $orgName = $orgData['localizedName'];
+                            } elseif (isset($orgData['name']['localized'])) {
+                                $orgName = reset($orgData['name']['localized']);
+                            }
+
+                            $accounts[] = [
+                                'id' => $orgUrn,
+                                'name' => $orgName ?: 'LinkedIn Page',
+                                'profilePicture' => null, // Would need to fetch more fields for logo
+                                'type' => 'organization',
+                                'raw' => $orgData
+                            ];
+                        }
+                    }
+                } catch (\Exception $e) {
+                    Log::warning('Failed to fetch LinkedIn organizations: ' . $e->getMessage());
+                }
+
+                return $accounts;
 
             case 'x':
                 // X v2 API user profile - Updated endpoint
